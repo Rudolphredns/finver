@@ -13,45 +13,30 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    //ยืนยันตัวตน
+    // Check if the user is authenticated
     if (isLoaded && !isSignedIn) {
-      //กลับไปหน้าล็อคอิน (ทำแบบนี้เพราะบางครั้ง manual direct )
+      // Redirect to login page if the user is not signed in
       router.push('/sign-in');
       return;
     }
 
-    // ให้ socket รับคำสั่งเอา
+    // Set up socket listener if user is signed in
     if (isLoaded && isSignedIn) {
       socket.on("status", (message: string) => {
         setStatus(message);
       });
     }
 
-
+    // Clean up the socket listener when the component is unmounted
     return () => {
       socket.off("status");
     };
   }, [isLoaded, isSignedIn, router]);
 
-  // Handlers for the buttons
-  const handleMatchVideo = () => {
-    console.log("Match Video button clicked");
-    // Add your logic for video matching here
-  };
-
-  const handleMatchChat = () => {
-    console.log("Match Chat button clicked");
-    // Add your logic for chat matching here
-  };
-
   return (
     <div>
       <h1>Welcome to the Chat App</h1>
-      <p>{status}</p>
-      <div>
-        <button onClick={handleMatchVideo} style={{ margin: '10px', padding: '10px' }}>Match Video</button>
-        <button onClick={handleMatchChat} style={{ margin: '10px', padding: '10px' }}>Match Chat</button>
-      </div>
+      <p>{status}</p> 
     </div>
   );
 }

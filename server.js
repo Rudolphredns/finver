@@ -9,6 +9,7 @@ const port = 3000;
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
 
+
 app.prepare().then(() => {
   const httpServer = createServer(handler);
   const io = new Server(httpServer);
@@ -18,7 +19,7 @@ app.prepare().then(() => {
     socket.emit("status", "You are connected!");
   });
 
-  // เพิ่ม log เพื่อบอกว่าเซิร์ฟเวอร์กำลังเริ่ม
+  
   console.log("Server is starting...");
 
   httpServer

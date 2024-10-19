@@ -2,10 +2,11 @@
   "name": "finver",
   "version": "0.1.0",
   "private": true,
+   "type":"module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "nodemon server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "next lint"
   },
   "dependencies": {
@@ -17,6 +18,8 @@
     "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18",
+    "socket.io": "^4.8.0",
+    "socket.io-client": "^4.8.0",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7"
   },

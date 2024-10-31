@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSocket } from "@/context/Socketcontext";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 export default function VideoPeer() {
   const { socket } = useSocket();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const params = useParams();
+  const router = useRouter();
   const roomId = params?.roomId as string | undefined;
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!socket || !roomId) {
       console.error("Socket or roomId is missing.");
+      setErrorMessage("Connection error. Please try rejoining.");
       return;
     }
 
@@ -31,12 +34,14 @@ export default function VideoPeer() {
     const createPeerConnection = () => {
       peerConnection = new RTCPeerConnection(config);
 
+      // Handle receiving tracks from the remote peer
       peerConnection.ontrack = (event) => {
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
         }
       };
 
+      // Handle sending ICE candidates to the remote peer
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit("sendIceCandidate", { candidate: event.candidate, roomId });
@@ -45,57 +50,99 @@ export default function VideoPeer() {
     };
 
     const startConnection = async () => {
-      createPeerConnection();
+      try {
+        createPeerConnection();
 
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
-
-      localStream.getTracks().forEach((track) => {
-        if (peerConnection.signalingState !== 'closed') {
-          peerConnection.addTrack(track, localStream);
+        // Get the user's media stream and add tracks to the peer connection
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
         }
-      });
+
+        localStream.getTracks().forEach((track) => {
+          if (peerConnection.signalingState !== "closed") {
+            peerConnection.addTrack(track, localStream);
+          }
+        });
+      } catch (error) {
+        console.error("Error starting connection:", error);
+        setErrorMessage("Failed to access camera and microphone. Please check your settings.");
+      }
     };
 
-    // เริ่มการเชื่อมต่อ
+    // Start the connection process
     startConnection();
 
-    // ฟัง event เมื่อมีการจับคู่
+    // Listen for matched event to initiate the call
     socket.on("videoMatched", (data) => {
       console.log("Video matched with:", data.peerUser);
       console.log("Room ID:", data.roomId);
-      
-      // หลังจากจับคู่แล้ว ส่ง offer
-      socket.emit("sendOffer", { roomId });
+
+      if (data.roomId) {
+        if (data.initiator) {
+          // The current user is the initiator; create and send an offer
+          peerConnection.createOffer()
+            .then((offer) => {
+              return peerConnection.setLocalDescription(offer);
+            })
+            .then(() => {
+              socket.emit("sendOffer", { offer: peerConnection.localDescription, roomId });
+            })
+            .catch((error) => {
+              console.error("Error creating offer:", error);
+              setErrorMessage("Failed to create connection. Please try again.");
+            });
+        }
+      } else {
+        console.error("No room ID received from server.");
+        setErrorMessage("Failed to join the room. No room ID received.");
+      }
     });
 
-    // ฟัง event รับ ICE candidate
+    // Listen for ICE candidates from the server
     socket.on("receiveIceCandidate", (candidate) => {
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      if (peerConnection && candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+          .catch((error) => {
+            console.error("Error adding received ICE candidate:", error);
+          });
+      }
     });
 
-    // ฟัง event รับ Offer
+    // Listen for an offer from the other user
     socket.on("receiveOffer", async (offer) => {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit("sendAnswer", { answer: peerConnection.localDescription, roomId });
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit("sendAnswer", { answer: peerConnection.localDescription, roomId });
+      } catch (error) {
+        console.error("Error handling received offer:", error);
+        setErrorMessage("Failed to handle incoming connection offer.");
+      }
     });
 
-    // ฟัง event รับ Answer
+    // Listen for an answer from the other user
     socket.on("receiveAnswer", async (answer) => {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error("Error handling received answer:", error);
+        setErrorMessage("Failed to establish the connection.");
+      }
     });
 
+    // Clean up when the component unmounts
     return () => {
+      socket.off("videoMatched");
       socket.off("receiveIceCandidate");
       socket.off("receiveOffer");
       socket.off("receiveAnswer");
+
       if (localStream) {
         localStream.getTracks().forEach((track) => track.stop());
       }
+
       if (peerConnection) {
         peerConnection.close();
       }
@@ -105,6 +152,7 @@ export default function VideoPeer() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <h1 className="text-3xl font-bold mb-4">Video Call Room: {roomId}</h1>
+      {errorMessage && <p className="text-red-500 mb-4">{errorMessage}</p>}
       <div className="flex space-x-4">
         <video ref={localVideoRef} autoPlay muted className="w-1/2" />
         <video ref={remoteVideoRef} autoPlay className="w-1/2" />

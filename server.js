@@ -46,6 +46,7 @@ app.prepare().then(() => {
 
       if (videoQueue.length > 0) {
         const matchedUser = videoQueue.shift();
+        // const roomId = "1" ;
         const roomId = uuidv4();
 
         io.to(requestingUser.socketId).emit('videoMatched', { peerUser: matchedUser.profile, roomId });
@@ -72,7 +73,7 @@ app.prepare().then(() => {
 
       if (chatQueue.length > 0) {
         const matchedUser = chatQueue.shift();
-        const roomId = uuidv4();
+        const roomId = "1" ;
 
         io.to(requestingUser.socketId).emit('chatMatched', { peerUser: matchedUser.profile, roomId });
         io.to(matchedUser.socketId).emit('chatMatched', { peerUser: requestingUser.profile, roomId });

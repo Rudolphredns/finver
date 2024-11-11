@@ -16,12 +16,9 @@ app.prepare().then(() => {
 
   let onlineUser = [];
   let videoQueue = [];
-  let chatQueue = [];
 
   io.on("connection", (socket) => {
-    console.log('Connection Success...');
-
-    socket.emit('getUser', onlineUser);
+    console.log('User connected:', socket.id);
 
     socket.on('addnewUser', (clerkUser) => {
       if (clerkUser && !onlineUser.some(user => user?.userId === clerkUser.id)) {
@@ -34,64 +31,56 @@ app.prepare().then(() => {
       }
     });
 
-    // Handle match video call
+    // Helper function to emit event with retries
+    const emitWithRetry = (socketId, event, data, retries = 3) => {
+      const targetSocket = io.sockets.sockets.get(socketId);
+      if (retries === 0 || !targetSocket) return;
+      
+      targetSocket.emit(event, data, (ack) => {
+        if (!ack) {
+          console.log(`Retrying ${event} to ${socketId} (${3 - retries + 1}/3)`);
+          setTimeout(() => emitWithRetry(socketId, event, data, retries - 1), 500);
+        }
+      });
+    };
+
+    // Handle match video call with a short delay to ensure readiness
     socket.on('matchVideo', (data) => {
-      console.log('Matching video for user:', data.userId);
+      setTimeout(() => {
+        console.log('Attempting to match video for user:', data.userId);
 
-      const requestingUser = onlineUser.find(user => user.userId === data.userId);
-      if (!requestingUser) {
-        console.log('User not found for matching');
-        return;
-      }
+        const requestingUser = onlineUser.find(user => user.userId === data.userId);
+        if (!requestingUser) {
+          console.log('User not found for matching');
+          return;
+        }
 
-      if (videoQueue.length > 0) {
-        const matchedUser = videoQueue.shift();
-        // const roomId = "1" ;
-        const roomId = uuidv4();
+        if (videoQueue.length > 0) {
+          const matchedUser = videoQueue.shift();
+          const roomId = uuidv4();
 
-        io.to(requestingUser.socketId).emit('videoMatched', { peerUser: matchedUser.profile, roomId });
-        io.to(matchedUser.socketId).emit('videoMatched', { peerUser: requestingUser.profile, roomId });
+          // Send videoMatched event with retry for both users
+          emitWithRetry(requestingUser.socketId, 'videoMatched', { peerUser: matchedUser.profile, roomId, initiator: true });
+          emitWithRetry(matchedUser.socketId, 'videoMatched', { peerUser: requestingUser.profile, roomId, initiator: false });
 
-        console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
-        console.log(`User ${requestingUser.userId} is joining room: ${roomId}`);
-        console.log(`User ${matchedUser.userId} is joining room: ${roomId}`);
-      } else {
-        videoQueue.push(requestingUser);
-        console.log(`User ${requestingUser.userId} added to video queue`);
-      }
+          // Log and join both users to the same room
+          socket.join(roomId);  // Add requesting user to the room
+          io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);  // Add matched user to the room
+
+          console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
+        } else {
+          videoQueue.push(requestingUser);  // Add requesting user to queue if no match found
+          console.log(`User ${requestingUser.userId} added to video queue`);
+        }
+      }, 500);  // Short delay to ensure socket readiness
     });
 
-    // Handle match chat
-    socket.on('matchChat', (data) => {
-      console.log('Matching chat for user:', data.userId);
-
-      const requestingUser = onlineUser.find(user => user.userId === data.userId);
-      if (!requestingUser) {
-        console.log('User not found for matching');
-        return;
-      }
-
-      if (chatQueue.length > 0) {
-        const matchedUser = chatQueue.shift();
-        const roomId = "1" ;
-
-        io.to(requestingUser.socketId).emit('chatMatched', { peerUser: matchedUser.profile, roomId });
-        io.to(matchedUser.socketId).emit('chatMatched', { peerUser: requestingUser.profile, roomId });
-
-        console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for chat in room ${roomId}`);
-      } else {
-        chatQueue.push(requestingUser);
-        console.log(`User ${requestingUser.userId} added to chat queue`);
-      }
-    });
-
-    // Handle disconnect
     socket.on('disconnect', () => {
       onlineUser = onlineUser.filter(user => user.socketId !== socket.id);
       videoQueue = videoQueue.filter(user => user.socketId !== socket.id);
-      chatQueue = chatQueue.filter(user => user.socketId !== socket.id);
 
       io.emit('getUser', onlineUser);
+      console.log(`User ${socket.id} disconnected`);
     });
   });
 

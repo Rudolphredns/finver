@@ -17,6 +17,11 @@
     "next": "14.2.15",
     "react": "^18",
     "react-dom": "^18",
+<<<<<<< Updated upstream
+=======
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+>>>>>>> Stashed changes
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7"
   },

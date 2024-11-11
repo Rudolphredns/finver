@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -34,21 +34,24 @@ app.prepare().then(() => {
     const handleLeaveRoom = (roomId) => {
       const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
       clientsInRoom.forEach((clientSocketId) => {
-        io.to(clientSocketId).emit("peerLeftRoom"); // แจ้งให้ผู้ใช้ในห้องทราบว่ามีการออกจากห้อง
+        io.to(clientSocketId).emit("peerLeftRoom");
       });
       clientsInRoom.forEach((clientSocketId) => {
-        io.sockets.sockets.get(clientSocketId)?.leave(roomId); // นำทุกคนออกจากห้อง
+        io.sockets.sockets.get(clientSocketId)?.leave(roomId);
       });
       console.log(`Room ${roomId} has been closed.`);
     };
 
     socket.on("matchVideo", (data) => {
-      setTimeout(() => {
-        console.log('Attempting to match video for user:', data.userId);
+      // ลบผู้ใช้ที่อาจอยู่ในคิวก่อนหน้านี้
+      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
 
-        const requestingUser = onlineUser.find(user => user.userId === data.userId);
+      setTimeout(() => {
+        console.log("Attempting to match video for user:", data.userId);
+
+        const requestingUser = onlineUser.find((user) => user.userId === data.userId);
         if (!requestingUser) {
-          console.log('User not found for matching');
+          console.log("User not found for matching");
           return;
         }
 
@@ -56,11 +59,11 @@ app.prepare().then(() => {
           const matchedUser = videoQueue.shift();
           const roomId = uuidv4();
 
-          socket.join(roomId);  
-          io.sockets.sockets.get(matchedUser.socketId)?.join(roomId); 
+          socket.join(roomId);
+          io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
 
-          io.to(requestingUser.socketId).emit('videoMatched', { peerUser: matchedUser.profile, roomId, initiator: true });
-          io.to(matchedUser.socketId).emit('videoMatched', { peerUser: requestingUser.profile, roomId, initiator: false });
+          io.to(requestingUser.socketId).emit("videoMatched", { peerUser: matchedUser.profile, roomId, initiator: true });
+          io.to(matchedUser.socketId).emit("videoMatched", { peerUser: requestingUser.profile, roomId, initiator: false });
 
           console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
 
@@ -71,19 +74,20 @@ app.prepare().then(() => {
           videoQueue.push(requestingUser);
           console.log(`User ${requestingUser.userId} added to video queue`);
         }
-      }, 500);  // Short delay to ensure socket readiness
+      }, 500); // Short delay to ensure socket readiness
     });
 
-    // รับ event leaveRoom จาก client
+    // รับ event leaveRoom จาก client และลบออกจากคิว
     socket.on("leaveRoom", ({ roomId }) => {
       console.log(`User ${socket.id} leaving room ${roomId}`);
-      handleLeaveRoom(roomId); // เรียกใช้ฟังก์ชัน handleLeaveRoom
+      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id); // ลบผู้ใช้จากคิว
+      handleLeaveRoom(roomId);
     });
 
-    // ทำความสะอาดเมื่อผู้ใช้ disconnect
+    // เมื่อผู้ใช้ disconnect ให้ลบออกจาก videoQueue ด้วย
     socket.on("disconnect", () => {
       onlineUser = onlineUser.filter((user) => user.socketId !== socket.id);
-      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
+      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id); // ลบผู้ใช้จากคิวเมื่อ disconnect
       io.emit("getUser", onlineUser);
       console.log(`User ${socket.id} disconnected`);
     });

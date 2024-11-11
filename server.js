@@ -18,34 +18,31 @@ app.prepare().then(() => {
   let videoQueue = [];
 
   io.on("connection", (socket) => {
-    console.log('User connected:', socket.id);
+    console.log("User connected:", socket.id);
 
-    socket.on('addnewUser', (clerkUser) => {
-      if (clerkUser && !onlineUser.some(user => user?.userId === clerkUser.id)) {
+    socket.on("addnewUser", (clerkUser) => {
+      if (clerkUser && !onlineUser.some((user) => user?.userId === clerkUser.id)) {
         onlineUser.push({
           userId: clerkUser.id,
           socketId: socket.id,
-          profile: clerkUser
+          profile: clerkUser,
         });
-        io.emit('getUser', onlineUser);
+        io.emit("getUser", onlineUser);
       }
     });
 
-    // Helper function to emit event with retries
-    const emitWithRetry = (socketId, event, data, retries = 3) => {
-      const targetSocket = io.sockets.sockets.get(socketId);
-      if (retries === 0 || !targetSocket) return;
-      
-      targetSocket.emit(event, data, (ack) => {
-        if (!ack) {
-          console.log(`Retrying ${event} to ${socketId} (${3 - retries + 1}/3)`);
-          setTimeout(() => emitWithRetry(socketId, event, data, retries - 1), 500);
-        }
+    const handleLeaveRoom = (roomId) => {
+      const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+      clientsInRoom.forEach((clientSocketId) => {
+        io.to(clientSocketId).emit("peerLeftRoom"); // แจ้งให้ผู้ใช้ในห้องทราบว่ามีการออกจากห้อง
       });
+      clientsInRoom.forEach((clientSocketId) => {
+        io.sockets.sockets.get(clientSocketId)?.leave(roomId); // นำทุกคนออกจากห้อง
+      });
+      console.log(`Room ${roomId} has been closed.`);
     };
 
-    // Handle match video call with a short delay to ensure readiness
-    socket.on('matchVideo', (data) => {
+    socket.on("matchVideo", (data) => {
       setTimeout(() => {
         console.log('Attempting to match video for user:', data.userId);
 
@@ -59,27 +56,35 @@ app.prepare().then(() => {
           const matchedUser = videoQueue.shift();
           const roomId = uuidv4();
 
-          // Send videoMatched event with retry for both users
-          emitWithRetry(requestingUser.socketId, 'videoMatched', { peerUser: matchedUser.profile, roomId, initiator: true });
-          emitWithRetry(matchedUser.socketId, 'videoMatched', { peerUser: requestingUser.profile, roomId, initiator: false });
+          socket.join(roomId);  
+          io.sockets.sockets.get(matchedUser.socketId)?.join(roomId); 
 
-          // Log and join both users to the same room
-          socket.join(roomId);  // Add requesting user to the room
-          io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);  // Add matched user to the room
+          io.to(requestingUser.socketId).emit('videoMatched', { peerUser: matchedUser.profile, roomId, initiator: true });
+          io.to(matchedUser.socketId).emit('videoMatched', { peerUser: requestingUser.profile, roomId, initiator: false });
 
           console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
+
+          // เมื่อผู้ใช้ disconnect หรือ leaveRoom ให้ออกจากห้อง
+          socket.on("disconnect", () => handleLeaveRoom(roomId));
+          io.sockets.sockets.get(matchedUser.socketId)?.on("disconnect", () => handleLeaveRoom(roomId));
         } else {
-          videoQueue.push(requestingUser);  // Add requesting user to queue if no match found
+          videoQueue.push(requestingUser);
           console.log(`User ${requestingUser.userId} added to video queue`);
         }
       }, 500);  // Short delay to ensure socket readiness
     });
 
-    socket.on('disconnect', () => {
-      onlineUser = onlineUser.filter(user => user.socketId !== socket.id);
-      videoQueue = videoQueue.filter(user => user.socketId !== socket.id);
+    // รับ event leaveRoom จาก client
+    socket.on("leaveRoom", ({ roomId }) => {
+      console.log(`User ${socket.id} leaving room ${roomId}`);
+      handleLeaveRoom(roomId); // เรียกใช้ฟังก์ชัน handleLeaveRoom
+    });
 
-      io.emit('getUser', onlineUser);
+    // ทำความสะอาดเมื่อผู้ใช้ disconnect
+    socket.on("disconnect", () => {
+      onlineUser = onlineUser.filter((user) => user.socketId !== socket.id);
+      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
+      io.emit("getUser", onlineUser);
       console.log(`User ${socket.id} disconnected`);
     });
   });

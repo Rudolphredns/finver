@@ -118,7 +118,7 @@ export default function VideoPeer() {
       {errorMessage && <p className="text-red-500 mb-4">{errorMessage}</p>}
       <div className="flex space-x-4">
         <video ref={localVideoRef} autoPlay muted className="w-1/2" />
-        <video ref={remoteVideoRef} autoPlay className="w-1/2" />  
+        
       </div>
     </div>
   );

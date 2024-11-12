@@ -26,6 +26,9 @@ export default function Home() {
       });
     }
 
+    
+
+
     // Clean up the socket listener when the component is unmounted
     return () => {
       socket?.off("status");
@@ -46,6 +49,23 @@ export default function Home() {
       socket.emit('matchChat', { userId: user.id });
     }
   };
+
+  useEffect(() => {
+    // ฟัง event 'redirectTo' จาก server
+    if (socket) {
+      socket.on('redirectTo', (path: string) => {
+        console.log(`Redirecting to: ${path}`);
+        router.push(path); // ใช้ router.push แทน window.location.href
+      });
+    }
+  
+    return () => {
+      if (socket) {
+        // ลบ event listener เมื่อ component นี้ unmount
+        socket.off('redirectTo');
+      }
+    };
+  }, [socket, router]);
 
   return (
     <div>

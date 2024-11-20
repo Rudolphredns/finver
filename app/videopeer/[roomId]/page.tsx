@@ -12,6 +12,7 @@ export default function VideoPeer() {
   const router = useRouter();
   const roomId = params?.roomId as string | undefined;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [peerName, setPeerName] = useState<string | null>(null); // แก้เป็น null เพื่อรองรับสถานะรอข้อมูล
 
   useEffect(() => {
     if (!socket || !roomId) {
@@ -72,35 +73,19 @@ export default function VideoPeer() {
       console.log("Your peer has left the room.");
       setErrorMessage("Your peer has left the room.");
       setTimeout(() => {
-        router.push("/"); // นำผู้ใช้กลับไปหน้าหลัก
-      }, 2000); // รอ 2 วินาทีก่อนนำกลับไปหน้าแรก
+        router.push("/");
+      }, 2000);
     });
 
-    // ฟังก์ชันสำหรับการแจ้งเตือนก่อนออกจากห้อง
-    const confirmLeaveRoom = () => {
-      const confirmed = window.confirm("Are you sure you want to leave the video call?");
-      if (confirmed) {
-        socket.emit("leaveRoom", { roomId });
-        router.push("/"); // นำผู้ใช้กลับไปหน้าหลัก
-      }
-    };
-
-    // เพิ่ม Event listener สำหรับการออกจากหน้า
-    window.addEventListener("beforeunload", (event) => {
-      event.preventDefault();
-      event.returnValue = ""; // สำหรับ browser บางประเภทจะแสดงกล่องแจ้งเตือนโดยอัตโนมัติ
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") {
-        confirmLeaveRoom(); // เรียกใช้ confirmLeaveRoom เมื่อผู้ใช้พยายามออกจากหน้า
-      }
+    // ฟัง Event ชื่อของคู่สนทนา
+    socket.on("peerUserInfo", (data: { name: string }) => {
+      console.log("Received peerUserInfo event:", data); // ตรวจสอบข้อมูลใน Console
+      setPeerName(data.name || "Anonymous User");
     });
 
     return () => {
       socket.off("peerLeftRoom");
-      window.removeEventListener("beforeunload", confirmLeaveRoom);
-      document.removeEventListener("visibilitychange", confirmLeaveRoom);
+      socket.off("peerUserInfo");
 
       if (localStream) {
         localStream.getTracks().forEach((track) => track.stop());
@@ -117,8 +102,19 @@ export default function VideoPeer() {
       <h1 className="text-3xl font-bold mb-4">Video Call Room: {roomId}</h1>
       {errorMessage && <p className="text-red-500 mb-4">{errorMessage}</p>}
       <div className="flex space-x-4">
-        <video ref={localVideoRef} autoPlay muted className="w-1/2" />
-        <video ref={remoteVideoRef} autoPlay className="w-1/2" />  
+        {/* วิดีโอของตัวเอง */}
+        <div className="flex flex-col items-center">
+          <video ref={localVideoRef} autoPlay muted className="w-64 h-48 bg-gray-200 rounded-lg" />
+          <p className="mt-2 text-gray-700 font-semibold">You</p>
+        </div>
+
+        {/* วิดีโอของคู่สนทนา */}
+        <div className="flex flex-col items-center">
+          <video ref={remoteVideoRef} autoPlay className="w-64 h-48 bg-gray-200 rounded-lg" />
+          <p className="mt-2 text-gray-700 font-semibold">
+            {peerName || "Waiting for peer..."} {/* แสดงข้อความรอ */}
+          </p>
+        </div>
       </div>
     </div>
   );

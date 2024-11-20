@@ -20,17 +20,25 @@ app.prepare().then(() => {
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
+    // เพิ่มผู้ใช้ใหม่ในระบบ
     socket.on("addnewUser", (clerkUser) => {
+      console.log("Received user profile:", clerkUser);
       if (clerkUser && !onlineUser.some((user) => user?.userId === clerkUser.id)) {
         onlineUser.push({
           userId: clerkUser.id,
           socketId: socket.id,
-          profile: clerkUser,
+          profile: {
+            name: clerkUser.fullName || clerkUser.username || `User_${socket.id.slice(0, 6)}`,
+            email: clerkUser.emailAddresses?.[0]?.emailAddress || "Unknown Email",
+            ...clerkUser,
+          },
         });
         io.emit("getUser", onlineUser);
+        console.log("Updated onlineUser list:", onlineUser);
       }
     });
 
+    // ฟังก์ชันออกจากห้อง
     const handleLeaveRoom = (roomId) => {
       const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
       clientsInRoom.forEach((clientSocketId) => {
@@ -42,6 +50,7 @@ app.prepare().then(() => {
       console.log(`Room ${roomId} has been closed.`);
     };
 
+    // การจับคู่วิดีโอ
     socket.on("matchVideo", (data) => {
       // ลบผู้ใช้ที่อาจอยู่ในคิวก่อนหน้านี้
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
@@ -62,14 +71,24 @@ app.prepare().then(() => {
           socket.join(roomId);
           io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
 
+          console.log(`Matched Room: ${roomId}`);
+          console.log(`Requesting User: ${requestingUser.profile.name}`);
+          console.log(`Matched User: ${matchedUser.profile.name}`);
+
+          // เพิ่มดีเลย์ก่อนส่งข้อมูลชื่อคู่สนทนา
+          setTimeout(() => {
+            io.to(requestingUser.socketId).emit("peerUserInfo", { name: matchedUser.profile.name || "Anonymous User" });
+            io.to(matchedUser.socketId).emit("peerUserInfo", { name: requestingUser.profile.name || "Anonymous User" });
+
+            console.log(`Sent peerUserInfo to both users in Room: ${roomId}`);
+          }, 5000); // ดีเลย์ 5 วินาที
+
           io.to(requestingUser.socketId).emit("videoMatched", { peerUser: matchedUser.profile, roomId, initiator: true });
           io.to(matchedUser.socketId).emit("videoMatched", { peerUser: requestingUser.profile, roomId, initiator: false });
 
-          console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
-
-          // เมื่อผู้ใช้ disconnect หรือ leaveRoom ให้ออกจากห้อง
-          socket.on("disconnect", () => handleLeaveRoom(roomId));
-          io.sockets.sockets.get(matchedUser.socketId)?.on("disconnect", () => handleLeaveRoom(roomId));
+          // ตรวจจับการออกจากระบบ
+          socket.once("disconnect", () => handleLeaveRoom(roomId));
+          io.sockets.sockets.get(matchedUser.socketId)?.once("disconnect", () => handleLeaveRoom(roomId));
         } else {
           videoQueue.push(requestingUser);
           console.log(`User ${requestingUser.userId} added to video queue`);
@@ -84,7 +103,7 @@ app.prepare().then(() => {
       handleLeaveRoom(roomId);
     });
 
-    // เมื่อผู้ใช้ disconnect ให้ลบออกจาก videoQueue ด้วย
+    // เมื่อผู้ใช้ disconnect ให้ลบออกจาก videoQueue และ onlineUser
     socket.on("disconnect", () => {
       onlineUser = onlineUser.filter((user) => user.socketId !== socket.id);
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id); // ลบผู้ใช้จากคิวเมื่อ disconnect

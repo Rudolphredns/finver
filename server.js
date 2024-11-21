@@ -4,9 +4,7 @@ import { Server } from "socket.io";
 import { v4 as uuidv4 } from "uuid";
 import mysql from "mysql2";
 import bodyParser from "body-parser";
-import express from 'express';
-
-
+import express from "express";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -17,61 +15,57 @@ const handler = app.getRequestHandler();
 
 // ตั้งค่า MySQL
 const db = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'finver',
+  host: "localhost",
+  user: "root",
+  password: "",
+  database: "finver",
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
 });
 
 // เชื่อมต่อฐานข้อมูล
-db.getConnection((err, connection) => {
+db.getConnection((err) => {
   if (err) {
-    console.error('ไม่สามารถเชื่อมต่อกับฐานข้อมูล:', err);
+    console.error("ไม่สามารถเชื่อมต่อกับฐานข้อมูล:", err);
   } else {
-    console.log('เชื่อมต่อกับฐานข้อมูล MySQL สำเร็จ!');
-    connection.release();
+    console.log("เชื่อมต่อกับฐานข้อมูล MySQL สำเร็จ!");
   }
 });
-
 
 const expressApp = express();
 expressApp.use(bodyParser.json());
 
-
-expressApp.post('/webhook', (req, res) => {
+// Webhook สำหรับอัปเดตข้อมูลผู้ใช้
+expressApp.post("/webhook", (req, res) => {
   const event = req.body;
-  console.log('Received Webhook:'); 
+  console.log("Received Webhook:", event);
 
-  
-  if (event.type === 'user.updated') {
+  if (event.type === "user.updated") {
     const updatedUsername = event.data.username;
     const clerkUserId = event.data.id;
-    console.log(`Username updated to: ${updatedUsername}, Clerk User ID: ${clerkUserId}`);
 
-    
-    const updateQuery = 'UPDATE users SET username = ? WHERE clerk_user_id = ?';
-    db.query(updateQuery, [updatedUsername, clerkUserId], (err, results) => {
+    console.log(`Updating username to: ${updatedUsername}, Clerk User ID: ${clerkUserId}`);
+
+    const updateQuery = "UPDATE users SET username = ? WHERE clerk_user_id = ?";
+    db.query(updateQuery, [updatedUsername, clerkUserId], (err) => {
       if (err) {
         console.error("Error updating username in database:", err);
-        res.status(500).send('Internal Server Error');
+        res.status(500).send("Internal Server Error");
       } else {
         console.log(`Username for user ${clerkUserId} updated successfully.`);
-        res.status(200).send('Webhook processed');
+        res.status(200).send("Webhook processed");
       }
     });
   } else {
     console.log("Invalid event type:", event.type);
-    res.status(400).send('Invalid event');
+    res.status(400).send("Invalid event");
   }
 });
 
-
 app.prepare().then(() => {
   const httpServer = createServer((req, res) => {
-    if (req.url?.startsWith('/webhook')) {
+    if (req.url?.startsWith("/webhook")) {
       expressApp(req, res);
     } else {
       handler(req, res);
@@ -79,197 +73,209 @@ app.prepare().then(() => {
   });
 
   const io = new Server(httpServer);
-
   let onlineUser = [];
   let videoQueue = [];
 
-  //user เชื่อมต่อ >>
+  // ฟังก์ชันสำหรับบันทึกประวัติการจับคู่
+  const saveMatchHistory = (userId1, userId2) => {
+    const insertQuery = "INSERT INTO match_history (user1_id, user2_id) VALUES (?, ?)";
+    db.query(insertQuery, [userId1, userId2], (err) => {
+      if (err) {
+        console.error("Error saving match history:", err);
+      } else {
+        console.log(`Match history saved: ${userId1} <-> ${userId2}`);
+      }
+    });
+  };
+
+  // ฟังก์ชันสำหรับตรวจสอบว่าผู้ใช้สองคนเคยจับคู่กันหรือยัง
+  const hasMatchedBefore = (userId1, userId2, callback) => {
+    const checkQuery =
+      "SELECT * FROM match_history WHERE (user1_id = ? AND user2_id = ?) OR (user1_id = ? AND user2_id = ?)";
+    db.query(checkQuery, [userId1, userId2, userId2, userId1], (err, results) => {
+      if (err) {
+        console.error("Error checking match history:", err);
+        callback(false);
+      } else {
+        callback(results.length > 0);
+      }
+    });
+  };
+
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id); // log check ดู socket
+    console.log("User connected:", socket.id);
 
     socket.on("addnewUser", (clerkUser) => {
       if (clerkUser && !onlineUser.some((user) => user?.userId === clerkUser.id)) {
-        console.log(`User is Connected: ${clerkUser.username}, ${clerkUser.email}`); //ปัญหาตอนนี้ยังหา email ของ user ไม่เจอ
+        console.log(`User connected: ${clerkUser.username}, ${clerkUser.email || "Email not provided"}`);
 
-        
-        const checkQuery = 'SELECT * FROM users WHERE clerk_user_id = ?'; //เรียกดูว่า clerkId นี้มีแล้วยัง
-
+        const checkQuery = "SELECT * FROM users WHERE clerk_user_id = ?";
         db.query(checkQuery, [clerkUser.id], (err, results) => {
           if (err) {
-            console.error("Error checking user in database:", err); //ถ้าเกิด error เรียนดูว่า error จากอะไร
-            connection.release();  //ปิดการเชื่อมต่อ ข้อมูล
+            console.error("Error checking user in database:", err);
             return;
           }
 
-          // ถ้า เป็น user ใหม่ ให้ insert เข้า database (Email null)
           if (results.length === 0) {
             const insertQuery = `INSERT INTO users (clerk_user_id, username, email, role) VALUES (?, ?, ?, ?)`;
-            db.query(insertQuery, [clerkUser.id, clerkUser.username, clerkUser.email, clerkUser.role], (err, results) => {
+            db.query(insertQuery, [clerkUser.id, clerkUser.username, clerkUser.email || null, clerkUser.role], (err) => {
               if (err) {
                 console.error("Error inserting user into database:", err);
-                connection.release(); 
               } else {
-                console.log(`User ถูกเพิ่มเข้าฐานข้อมูลด้วย clerkID: ${clerkUser.id}, Clerk username: ${clerkUser.username}`);
-                connection.release(); 
-
-                socket.emit('redirectTo', '/select_interest');
-
+                console.log(`User added to database: ${clerkUser.username}`);
+                socket.emit("redirectTo", "/select_interest");
               }
             });
           } else {
-            console.log(`User  clerkID: ${clerkUser.id},${clerkUser.username} มีอยู่ในฐานข้อมูลอยู่แล้ว`);
-            
+            console.log(`User already exists in database: ${clerkUser.username}`);
           }
-
-          
         });
+
         onlineUser.push({
           userId: clerkUser.id,
           socketId: socket.id,
           profile: clerkUser,
         });
 
-        io.emit("getUser", onlineUser); 
-        
+        io.emit("getUser", onlineUser);
       }
     });
 
-   
-    const handleLeaveRoom = (roomId) => {
-      const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-      clientsInRoom.forEach((clientSocketId) => {
-        io.to(clientSocketId).emit("peerLeftRoom");
-      });
-      clientsInRoom.forEach((clientSocketId) => {
-        io.sockets.sockets.get(clientSocketId)?.leave(roomId);
-      });
-      console.log(`Room ${roomId} has been closed.`);
-    };
-
-
-    // {With Out Interest}
-
-    // socket.on("matchVideo", (data) => {
-    //   // ลบผู้ใช้ที่อาจอยู่ในคิวก่อนหน้านี้
-    //   videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
-
-    //   setTimeout(() => {
-    //     console.log("Attempting to match video for user:", data.userId);
-
-    //     const requestingUser = onlineUser.find((user) => user.userId === data.userId);
-    //     if (!requestingUser) {
-    //       console.log("User not found for matching");
-    //       return;
-    //     }
-
-    //     if (videoQueue.length > 0) {
-    //       const matchedUser = videoQueue.shift();
-    //       const roomId = uuidv4();
-
-    //       socket.join(roomId);
-    //       io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
-
-    //       io.to(requestingUser.socketId).emit("videoMatched", { peerUser: matchedUser.profile, roomId, initiator: true });
-    //       io.to(matchedUser.socketId).emit("videoMatched", { peerUser: requestingUser.profile, roomId, initiator: false });
-
-    //       console.log(`User ${requestingUser.userId} matched with ${matchedUser.userId} for video call in room ${roomId}`);
-
-    //       // เมื่อผู้ใช้ disconnect หรือ leaveRoom ให้ออกจากห้อง
-    //       socket.on("disconnect", () => handleLeaveRoom(roomId));
-    //       io.sockets.sockets.get(matchedUser.socketId)?.on("disconnect", () => handleLeaveRoom(roomId));
-    //     } else {
-    //       videoQueue.push(requestingUser);
-    //       console.log(`User ${requestingUser.userId} added to video queue`);
-    //     }
-    //   }, 500); // Short delay to ensure socket readiness
-    // });
-
-
-
-    
-
-    // { With Interest }
     const getUserInterest = (userId, callback) => {
-      const interestQuery = 'SELECT interests FROM users WHERE clerk_user_id = ?';
+      const interestQuery = "SELECT interests FROM users WHERE clerk_user_id = ?";
       db.query(interestQuery, [userId], (err, results) => {
         if (err) {
           console.error("Error retrieving user interest from database:", err);
           callback(null);
         } else {
-          if (results.length > 0 && results[0].interests) {  // แก้เป็น results[0].interests
-            const interestsArray = results[0].interests.split(","); // แยกค่า interest ด้วยจุลภาค
-            console.log("Retrieved interests:", interestsArray); // Debug ดูค่า interests ที่แยกออกมา
-            callback(interestsArray);
+          if (results.length > 0 && typeof results[0].interests === "string") {
+            const interestsString = results[0].interests;
+            callback(interestsString);
           } else {
-            console.log("No interest found or interest is undefined for user:", userId);
-            callback(null);
+            console.log("No valid interests found for user:", userId);
+            callback("");
           }
         }
       });
     };
-    
+
     socket.on("matchVideo", (data) => {
-      // กำจัดผู้ใช้ที่ตัดการเชื่อมต่อจาก videoQueue
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
     
       setTimeout(() => {
         const requestingUser = onlineUser.find((user) => user.userId === data.userId);
     
         if (!requestingUser) {
-          console.log("ไม่พบผู้ใช้ที่ต้องการจับคู่");
+          console.log("Requesting user not found.");
           return;
         }
     
-        // ดึงข้อมูล interest ของผู้ใช้ที่ต้องการจับคู่จากฐานข้อมูล
-        getUserInterest(requestingUser.userId, (requestingUserInterests) => {
-          if (!requestingUserInterests) {
-            console.log("User has no interest defined, cannot proceed with matching.");
+        // ดึงข้อมูล gender และ sex_interest
+        const getUserDetails = (userId, callback) => {
+          const userQuery = "SELECT gender, sex_interest, interests FROM users WHERE clerk_user_id = ?";
+          db.query(userQuery, [userId], (err, results) => {
+            if (err) {
+              console.error("Error retrieving user details:", err);
+              callback(null);
+            } else if (results.length > 0) {
+              callback(results[0]);
+            } else {
+              console.log("User details not found for:", userId);
+              callback(null);
+            }
+          });
+        };
+    
+        getUserDetails(requestingUser.userId, (requestingUserDetails) => {
+          if (!requestingUserDetails) {
+            console.log("Requesting user details could not be fetched.");
             return;
           }
     
-          console.log("Requesting User Interests:", requestingUserInterests); // Debug interests ของผู้ใช้ที่ต้องการจับคู่
-          console.log("Current Video Queue:", videoQueue); // Debug ดู videoQueue ปัจจุบัน
+          const { gender, sex_interest, interests } = requestingUserDetails;
+          const requestingUserInterests = interests.split(",").map((interest) => interest.trim());
     
-          // ค้นหาผู้ใช้ใน videoQueue ที่มี interest ตรงกัน
-          const matchedUserIndex = videoQueue.findIndex((user) =>
-            Array.isArray(user.interests) && user.interests.some((interest) => requestingUserInterests.includes(interest))
-          );
+          const checkMatches = async () => {
+            for (const user of videoQueue) {
+              const matchedUserDetails = await new Promise((resolve) =>
+                getUserDetails(user.userId, resolve)
+              );
     
-          if (matchedUserIndex > -1) {
-            const matchedUser = videoQueue[matchedUserIndex];
-            videoQueue.splice(matchedUserIndex, 1); // นำ matchedUser ออกจาก queue
-            const roomId = uuidv4();
+              if (!matchedUserDetails) continue;
     
-            // เพิ่มผู้ใช้ทั้งคู่เข้าห้อง video call
-            socket.join(roomId);
-            io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
+              const {
+                gender: matchedUserGender,
+                sex_interest: matchedUserSexInterest,
+                interests: matchedUserInterests,
+              } = matchedUserDetails;
     
-            io.to(requestingUser.socketId).emit("videoMatched", { peerUser: matchedUser.profile, roomId, initiator: true });
-            io.to(matchedUser.socketId).emit("videoMatched", { peerUser: requestingUser.profile, roomId, initiator: false });
+              const interestsArray = matchedUserInterests.split(",").map((interest) => interest.trim());
     
-            console.log(`จับคู่สำเร็จ: User ${requestingUser.userId} matched with ${matchedUser.userId} in room ${roomId}`);
+              // เช็คเพศและความสนใจในเพศ
+              const isGenderMatch =
+                (sex_interest === "any" || sex_interest === matchedUserGender) &&
+                (matchedUserSexInterest === "any" || matchedUserSexInterest === gender);
     
-            socket.on("disconnect", () => handleLeaveRoom(roomId));
-            io.sockets.sockets.get(matchedUser.socketId)?.on("disconnect", () => handleLeaveRoom(roomId));
-          } else {
-            // กรณีไม่มีผู้ใช้ที่ interests ตรงกันใน queue
-            requestingUser.interests = requestingUserInterests; // เก็บ interests ของผู้ใช้
-            videoQueue.push(requestingUser); // เพิ่มผู้ใช้เข้า queue
-          }
+              if (!isGenderMatch) {
+                console.log(`Gender or sex interest mismatch: ${requestingUser.userId} with ${user.userId}`);
+                continue;
+              }
+    
+              // เช็คความสนใจที่ตรงกัน
+              const matchingInterests = interestsArray.filter((interest) =>
+                requestingUserInterests.includes(interest)
+              );
+    
+              // ตรวจสอบว่าเคยจับคู่กันแล้วหรือไม่
+              const hasMatched = await new Promise((resolve) =>
+                hasMatchedBefore(requestingUser.userId, user.userId, resolve)
+              );
+    
+              if (matchingInterests.length >= 3 && !hasMatched) {
+                const matchedUser = user;
+    
+                videoQueue = videoQueue.filter((u) => u.userId !== matchedUser.userId);
+    
+                const roomId = uuidv4();
+                socket.join(roomId);
+                io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
+    
+                io.to(requestingUser.socketId).emit("videoMatched", {
+                  peerUser: matchedUser.profile,
+                  roomId,
+                  initiator: true,
+                });
+                io.to(matchedUser.socketId).emit("videoMatched", {
+                  peerUser: requestingUser.profile,
+                  roomId,
+                  initiator: false,
+                });
+    
+                console.log(`Matched users: ${requestingUser.userId} with ${matchedUser.userId} in room ${roomId}`);
+    
+                //saveMatchHistory(requestingUser.userId, matchedUser.userId);
+    
+                return;
+              }
+            }
+    
+            requestingUser.interests = requestingUserInterests;
+            requestingUser.gender = gender;
+            requestingUser.sex_interest = sex_interest;
+    
+            videoQueue.push(requestingUser);
+            console.log(`User added to videoQueue: ${requestingUser.userId}`);
+          };
+    
+          checkMatches();
         });
       }, 500);
     });
-    
 
-    // Handle leave room and other events...
     socket.on("leaveRoom", ({ roomId }) => {
       console.log(`User ${socket.id} leaving room ${roomId}`);
-      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id); // ลบผู้ใช้จากคิว
-      handleLeaveRoom(roomId);
+      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
     });
-
-
-
 
     socket.on("disconnect", () => {
       onlineUser = onlineUser.filter((user) => user.socketId !== socket.id);
@@ -279,14 +285,7 @@ app.prepare().then(() => {
     });
   });
 
-  console.log("Server is starting...");
-
-  httpServer
-    .once("error", (err) => {
-      console.error(err);
-      process.exit(1);
-    })
-    .listen(port, () => {
-      console.log(`> Ready on http://${hostname}:${port}`);
-    });
+  httpServer.listen(port, () => {
+    console.log(`> Ready on http://${hostname}:${port}`);
+  });
 });

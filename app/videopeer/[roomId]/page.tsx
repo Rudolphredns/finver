@@ -2,20 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSocket } from "@/context/Socketcontext";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 
 export default function VideoPeer() {
   const { socket } = useSocket();
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const params = useParams();
-  const router = useRouter();
   const roomId = params?.roomId as string | undefined;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!socket || !roomId) {
-      console.error("Socket or roomId is missing.");
       setErrorMessage("Connection error. Please try rejoining.");
       return;
     }
@@ -24,11 +22,7 @@ export default function VideoPeer() {
     let peerConnection: RTCPeerConnection;
 
     const config = {
-      iceServers: [
-        {
-          urls: "stun:stun.l.google.com:19302",
-        },
-      ],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     };
 
     const createPeerConnection = () => {
@@ -42,9 +36,11 @@ export default function VideoPeer() {
 
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log("Sending ICE candidate:", event.candidate);
           socket.emit("sendIceCandidate", { candidate: event.candidate, roomId });
         }
       };
+      
     };
 
     const startConnection = async () => {
@@ -57,10 +53,10 @@ export default function VideoPeer() {
         }
 
         localStream.getTracks().forEach((track) => {
-          if (peerConnection.signalingState !== "closed") {
-            peerConnection.addTrack(track, localStream);
-          }
+          peerConnection.addTrack(track, localStream);
         });
+
+        socket.emit("readyForOffer", { roomId });
       } catch (error) {
         setErrorMessage("Failed to access camera and microphone. Please check your settings.");
       }
@@ -68,57 +64,75 @@ export default function VideoPeer() {
 
     startConnection();
 
-    socket.on("peerLeftRoom", () => {
-      console.log("Your peer has left the room.");
-      setErrorMessage("Your peer has left the room.");
-      setTimeout(() => {
-        router.push("/"); // นำผู้ใช้กลับไปหน้าหลัก
-      }, 2000); // รอ 2 วินาทีก่อนนำกลับไปหน้าแรก
-    });
+    socket.on("initiateOffer", async () => {
+      try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
 
-    // ฟังก์ชันสำหรับการแจ้งเตือนก่อนออกจากห้อง
-    const confirmLeaveRoom = () => {
-      const confirmed = window.confirm("Are you sure you want to leave the video call?");
-      if (confirmed) {
-        socket.emit("leaveRoom", { roomId });
-        router.push("/"); // นำผู้ใช้กลับไปหน้าหลัก
+        socket.emit("sendOffer", { sdp: offer, roomId });
+      } catch (error) {
+        console.error("Error creating offer:", error);
       }
-    };
-
-    // เพิ่ม Event listener สำหรับการออกจากหน้า
-    window.addEventListener("beforeunload", (event) => {
-      event.preventDefault();
-      event.returnValue = ""; // สำหรับ browser บางประเภทจะแสดงกล่องแจ้งเตือนโดยอัตโนมัติ
     });
 
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") {
-        confirmLeaveRoom(); // เรียกใช้ confirmLeaveRoom เมื่อผู้ใช้พยายามออกจากหน้า
+    socket.on("receiveOffer", async ({ sdp }) => {
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        socket.emit("sendAnswer", { sdp: answer, roomId });
+      } catch (error) {
+        console.error("Error handling offer:", error);
+      }
+    });
+
+    socket.on("receiveAnswer", async ({ sdp }) => {
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+      } catch (error) {
+        console.error("Error setting remote description:", error);
+      }
+    });
+
+    socket.on("receiveIceCandidate", async ({ candidate }) => {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error("Error adding ICE candidate:", error);
       }
     });
 
     return () => {
-      socket.off("peerLeftRoom");
-      window.removeEventListener("beforeunload", confirmLeaveRoom);
-      document.removeEventListener("visibilitychange", confirmLeaveRoom);
-
       if (localStream) {
         localStream.getTracks().forEach((track) => track.stop());
       }
-
       if (peerConnection) {
         peerConnection.close();
       }
+      socket.off("initiateOffer");
+      socket.off("receiveOffer");
+      socket.off("receiveAnswer");
+      socket.off("receiveIceCandidate");
     };
-  }, [socket, roomId, router]);
+  }, [socket, roomId]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
       <h1 className="text-3xl font-bold mb-4">Video Call Room: {roomId}</h1>
       {errorMessage && <p className="text-red-500 mb-4">{errorMessage}</p>}
       <div className="flex space-x-4">
-        <video ref={localVideoRef} autoPlay muted className="w-1/2" />
-        
+        <video
+          ref={localVideoRef}
+          autoPlay
+          muted
+          className="w-1/2 border border-gray-300 rounded-lg shadow-md"
+        />
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          className="w-1/2 border border-gray-300 rounded-lg shadow-md"
+        />
       </div>
     </div>
   );

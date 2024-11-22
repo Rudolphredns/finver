@@ -272,6 +272,29 @@ app.prepare().then(() => {
       }, 500);
     });
 
+
+    socket.on("readyForOffer", ({ roomId }) => {
+      console.log("User ready for offer in room:", roomId);
+      socket.join(roomId);
+      socket.to(roomId).emit("initiateOffer");
+    });
+
+    socket.on("sendOffer", ({ sdp, roomId }) => {
+      console.log("Sending offer to room:", roomId);
+      socket.to(roomId).emit("receiveOffer", { sdp });
+    });
+
+    socket.on("sendAnswer", ({ sdp, roomId }) => {
+      console.log("Sending answer to room:", roomId);
+      socket.to(roomId).emit("receiveAnswer", { sdp });
+    });
+    
+
+    socket.on("sendIceCandidate", ({ candidate, roomId }) => {
+      console.log("Sending ICE candidate to room:", roomId);
+      socket.to(roomId).emit("receiveIceCandidate", { candidate });
+    });
+
     socket.on("leaveRoom", ({ roomId }) => {
       console.log(`User ${socket.id} leaving room ${roomId}`);
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);

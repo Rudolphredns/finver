@@ -28,27 +28,44 @@ const NavBar = () => {
   };
 
   return (
-    <div className="sticky top-0 border-b-primary/10">
-      <Container>
-        <div className="flex justify-between items-center">
-          <div
-            className="flex items-center gap-1 cursor-pointer"
-            onClick={handleNavigateHome} // เรียก handleNavigateHome เมื่อคลิก
-          >
-            <div className="font-bold text-2xl">Finver</div>
-          </div>
-          <div className="flex gap-3 items-center">
-            <UserButton />
-            {!userId && (
-              <>
-                <Button onClick={() => router.push('/sign-in')} size='sm' variant='outline'>Sign in</Button>
-                <Button onClick={() => router.push('/sign-up')} size='sm' >Sign up</Button>
-              </>
-            )}
-          </div>
-        </div>
-      </Container>
+    <div className="sticky top-0 w-full bg-[#282828] text-white outline outline-4 outline-[#FC924B]">
+  <div className="max-w-screen-xl mx-auto p-4">
+    <div className="flex justify-between items-center">
+      {/* Logo and Navigation */}
+      <div
+        className="flex items-center gap-1 cursor-pointer"
+        onClick={handleNavigateHome}
+      >
+        <div className="font-bold text-2xl">Finver</div>
+      </div>
+
+      {/* User Authentication and Buttons */}
+      <div className="flex gap-4 items-center">
+        <UserButton />
+        {!userId && (
+          <>
+            <Button
+              onClick={() => router.push('/sign-in')}
+              size="sm"
+              variant="outline"
+              className="bg-transparent text-white border-white hover:bg-white hover:text-[#282828]"
+            >
+              Sign in
+            </Button>
+            <Button
+              onClick={() => router.push('/sign-up')}
+              size="sm"
+              className="bg-[#1D9A64] text-white hover:bg-[#157a4c]"
+            >
+              Sign up
+            </Button>
+          </>
+        )}
+      </div>
     </div>
+  </div>
+</div>
+
   );
 };
 

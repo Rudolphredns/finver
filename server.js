@@ -1,3 +1,4 @@
+
 import { createServer } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
@@ -15,14 +16,15 @@ const handler = app.getRequestHandler();
 
 // ตั้งค่า MySQL
 const db = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "finver",
+  host: process.env.DB_HOST || "localhost",  // ใช้ environment variable หากมี หรือใช้ localhost เป็นค่า default
+  user: process.env.DB_USER || "root",      // ใช้ environment variable หากมี หรือใช้ root เป็นค่า default
+  password: process.env.DB_PASSWORD || "",  // ใช้ environment variable หากมี หรือใช้ค่าว่างเป็น default
+  database: process.env.DB_NAME || "finver", // ใช้ environment variable หากมี หรือใช้ finver เป็นค่า default
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
 });
+
 
 // เชื่อมต่อฐานข้อมูล
 db.getConnection((err) => {

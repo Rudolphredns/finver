@@ -7,67 +7,102 @@ import ListOnlineUser from "@/components/ListOnlineUser";
 
 export default function Home() {
   const [status, setStatus] = useState<string>("");
-  const { isLoaded, isSignedIn, user } = useUser(); // ใช้ useUser() เพื่อดึงข้อมูลผู้ใช้
+  const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
-  const { socket, isSocketConnected } = useSocket(); // ใช้ socket จาก context
+  const { socket, isSocketConnected } = useSocket();
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   useEffect(() => {
-    // Check if the user is authenticated
-    if (isLoaded && !isSignedIn) {
-      // Redirect to login page if the user is not signed in
-      router.push('/sign-in');
-      return;
+    if (isLoaded) {
+      setIsInitialLoad(false);
     }
 
-    // Set up socket listener if user is signed in and socket is connected
     if (isLoaded && isSignedIn && isSocketConnected) {
       socket?.on("status", (message: string) => {
         setStatus(message);
       });
     }
 
-    // Clean up the socket listener when the component is unmounted
     return () => {
       socket?.off("status");
     };
   }, [isLoaded, isSignedIn, router, socket, isSocketConnected]);
 
-  // ฟังก์ชันสำหรับ match video call
   const handleMatchVideo = () => {
     if (socket && user) {
       socket.emit('matchVideo', { userId: user.id });
-      router.push('/videomatch'); 
+      router.push('/videomatch');
     }
   };
 
-  // ฟังก์ชันสำหรับ match chat
   const handleMatchChat = () => {
     if (socket && user) {
       socket.emit('matchChat', { userId: user.id });
     }
   };
 
-  return (
-    <div>
-      <h1>Welcome to the Chat App</h1>
-      <p>{status}</p>
-      <ListOnlineUser />
+  const handleSignIn = () => {
+    router.push('/sign-in');
+  };
 
-      {/* ปุ่มสำหรับ Match Video และ Match Chat */}
-      <div style={{ marginTop: "20px" }}>
-        <button
-          onClick={handleMatchVideo}
-          className="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition-all"
-        >
-          Match Video
-        </button>
-        <button
-          onClick={handleMatchChat}
-          className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75 transition-all"
-        >
-          Match Chat
-        </button>
-      </div>
+  const handleSignUp = () => {
+    router.push('/sign-up');
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-start px-4 py-8 relative" style={{ backgroundColor: "#343434" }}>
+      {isInitialLoad ? (
+        <div className="flex items-center justify-center relative z-10">
+          <h2 className="text-xl text-white">Loading...</h2>
+        </div>
+      ) : (
+        <div className="bg-[#00000] p-6 rounded-lg shadow-lg max-w-lg w-full relative z-10">
+          <h1 className="text-1xl font-semibold text-start text-[#FC924B] mb-4">
+            Find New Friends
+          </h1>
+          <h1 className="text-5xl font-semibold text-start text-[white] mb-4">
+            Finver
+          </h1>
+          <h1 className="text-1xl font-semibold text-start text-[white] mb-4">
+          Finver is a program that will help you meet new people around the world and 
+          let you talk to them. 
+          You can also create your 
+          own profile as you want. You can also see each other's faces through video chat and text messages.
+          </h1>
+          <p className="text-white text-[#34495e] mb-4">{status}</p>
+          {/* <ListOnlineUser /> */}
+
+          {/* Only show Sign In/Sign Up buttons if not signed in */}
+          {!isSignedIn && (
+            <div className="flex flex-col gap-4 mt-6">
+              <button
+                onClick={handleSignIn}
+                className="w-full px-2 py-2 bg-[#FC924B] text-white font-semibold rounded-lg shadow-md hover:bg-[#8e44ad] transition-all"
+              >
+                Let's Starts
+              </button>
+            </div>
+          )}
+
+          {/* Only show Match Video/Chat buttons if signed in */}
+          {isSignedIn && (
+            <div className="flex flex-col gap-4 mt-6">
+              <button
+                onClick={handleMatchVideo}
+                className="w-full px-4 py-2 bg-[#9b59b6] text-white font-semibold rounded-lg shadow-md hover:bg-[#8e44ad] transition-all"
+              >
+                Match Video
+              </button>
+              <button
+                onClick={handleMatchChat}
+                className="w-full px-4 py-2 bg-[#3498db] text-white font-semibold rounded-lg shadow-md hover:bg-[#2980b9] transition-all"
+              >
+                Match Chat
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ const ListOnlineUser = () => {
 
     return (
         <div>
-            <h2>จำนวนคนออนไลน์: {onlineUsers ? onlineUsers.length : 0} คน</h2>
+            <h2 className="text-3xl text-[#FC924B]">USER ONLINE : {onlineUsers ? onlineUsers.length : 0} ACCOUNT</h2>
             {onlineUsers && onlineUsers.map((onlineUser) => {
                 return (
                     <div key={onlineUser.userId}>

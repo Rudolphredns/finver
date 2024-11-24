@@ -10,22 +10,43 @@ export default function Videomatch() {
   const router = useRouter();
 
   useEffect(() => {
-    if (socket) {
-      // ฟัง event เมื่อมีการจับคู่สำเร็จ
-      socket.on("videoMatched", ({ peerUser, roomId }: { peerUser: SocketUser, roomId: string }) => {
-        console.log("Matched with user:", peerUser);
-        console.log("Room ID:", roomId);
-
-        // เปลี่ยนเส้นทางไปที่ /videopeer/[roomId] เมื่อจับคู่สำเร็จ
-        router.push(`/videopeer/${roomId}`);
-      });
-
-      // ลบ event listener เมื่อ component ถูกยกเลิก
-      return () => {
-        socket.off("videoMatched");
-      };
+    if (!socket) {
+      console.warn("Socket not initialized!");
+      return;
     }
+
+    if (!socket.connected) {
+      console.warn("Socket not connected!");
+      return;
+    }
+
+    // ฟัง event เมื่อมีการจับคู่สำเร็จ
+    const handleVideoMatched = ({ peerUser, roomId }: { peerUser: SocketUser; roomId: string }) => {
+      console.log("Matched with user:", peerUser);
+      console.log("Room ID:", roomId);
+
+      // เปลี่ยนเส้นทางไปที่ /videopeer/[roomId] เมื่อจับคู่สำเร็จ
+      router.push(`/videopeer/${roomId}`);
+    };
+
+    socket.on("videoMatched", handleVideoMatched);
+
+    // ลบ event listener เมื่อ component ถูกยกเลิก
+    return () => {
+      socket.off("videoMatched", handleVideoMatched);
+    };
   }, [socket, router]);
+
+  useEffect(() => {
+    // เพิ่ม timeout กรณีไม่มีการจับคู่
+    const timeout = setTimeout(() => {
+      console.warn("No match found within the timeout period.");
+    }, 30000); // 30 seconds timeout
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">

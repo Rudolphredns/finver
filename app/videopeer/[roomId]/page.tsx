@@ -13,8 +13,14 @@ export default function VideoPeer() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!socket || !roomId) {
-      setErrorMessage("Connection error. Please try rejoining.");
+    if (!socket) {
+      console.error("Socket is not initialized.");
+      setErrorMessage("Socket connection not available.");
+      return;
+    }
+    if (!roomId) {
+      console.error("Room ID is missing.");
+      setErrorMessage("Room ID not found.");
       return;
     }
 
@@ -40,11 +46,19 @@ export default function VideoPeer() {
           socket.emit("sendIceCandidate", { candidate: event.candidate, roomId });
         }
       };
-      
+
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log("ICE Connection State:", peerConnection.iceConnectionState);
+      };
     };
 
     const startConnection = async () => {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setErrorMessage("Your browser does not support video calling.");
+          return;
+        }
+
         createPeerConnection();
 
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -56,8 +70,10 @@ export default function VideoPeer() {
           peerConnection.addTrack(track, localStream);
         });
 
+        console.log("Ready for offer in Room:", roomId);
         socket.emit("readyForOffer", { roomId });
       } catch (error) {
+        console.error("Error accessing media devices:", error);
         setErrorMessage("Failed to access camera and microphone. Please check your settings.");
       }
     };
@@ -69,6 +85,7 @@ export default function VideoPeer() {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
 
+        console.log("Sending Offer to Room:", roomId);
         socket.emit("sendOffer", { sdp: offer, roomId });
       } catch (error) {
         console.error("Error creating offer:", error);
@@ -81,6 +98,7 @@ export default function VideoPeer() {
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
+        console.log("Sending Answer to Room:", roomId);
         socket.emit("sendAnswer", { sdp: answer, roomId });
       } catch (error) {
         console.error("Error handling offer:", error);

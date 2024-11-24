@@ -11,6 +11,21 @@ services:
       - DB_USER=root
       - DB_PASSWORD=root
       - DB_NAME=finver
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_bm90ZWQtZ25hdC01Mi5jbGVyay5hY2NvdW50cy5kZXYk
+      - CLERK_SECRET_KEY=sk_test_fjpHCzOYaEbjo2VUcwuoFvrDiTJeZ44xq2e7XB8H8E
+
+      - NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+      - NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+
+
+      - DB_HOST=mysql
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=finver
+
+      
+    env_file:
+      - .env.local  # ใช้ไฟล์ .env.local
     depends_on:
       - mysql
     networks:
@@ -23,9 +38,7 @@ services:
       MYSQL_DATABASE: finver
     ports:
       - "3306:3306"  # ถ้าต้องการเข้าถึงฐานข้อมูลจากภายนอก container
-    networks:
-      - finver-network
-
+    
 networks:
   finver-network:
     driver: bridge

@@ -1,6 +1,7 @@
 import { io } from 'socket.io-client';
 
-const socket = io('http://184.82.64.128:3000/'); // URL ของเซิร์ฟเวอร์
+const socket = io("http://localhost:3000/");
+
 
 socket.on('connect', () => {
     console.log('Connected to server');

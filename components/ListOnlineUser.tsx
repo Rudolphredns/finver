@@ -2,7 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { useSocket } from "@/context/Socketcontext";
-import { SetStateAction, useEffect } from "react";
+import { useEffect } from "react";
 import { SocketUser } from "@/types";
 
 const ListOnlineUser = () => {
@@ -10,31 +10,49 @@ const ListOnlineUser = () => {
     const { socket, onlineUsers, setOnlineUsers } = useSocket();
 
     useEffect(() => {
-        if (socket) {
-            // ฟัง event 'getUser' เพื่อรับข้อมูลผู้ใช้ที่ออนไลน์ทั้งหมดทุกครั้งที่ client เชื่อมต่อใหม่
-            const handleGetUserList = (users: SetStateAction<SocketUser[] | null>) => {
-                setOnlineUsers(users);
-            };
-
-            socket.on("getUser", handleGetUserList);
-
-            // ลบ listener เมื่อ component ถูกยกเลิก
-            return () => {
-                socket.off("getUser", handleGetUserList);
-            };
+        if (!socket) {
+            console.warn("Socket not initialized!");
+            return;
         }
-    }, [socket]);
+
+        if (!socket.connected) {
+            console.warn("Socket not connected!");
+            return;
+        }
+
+        // ฟัง event 'getUser' เพื่อรับข้อมูลผู้ใช้ที่ออนไลน์ทั้งหมด
+        const handleGetUserList = (users: SocketUser[] | null) => {
+            console.log("Received online users:", users);
+            setOnlineUsers(users || []);
+        };
+
+        // ฟัง event 'getUser'
+        socket.on("getUser", handleGetUserList);
+
+        // ฟัง event 'error'
+        socket.on("error", (error) => {
+            console.error("Socket error:", error);
+        });
+
+        // ลบ listeners เมื่อ component ถูก unmount
+        return () => {
+            socket.off("getUser", handleGetUserList);
+            socket.off("error");
+        };
+    }, [socket, setOnlineUsers]);
+
+    if (!onlineUsers) {
+        return <div>ไม่มีผู้ใช้ออนไลน์</div>;
+    }
 
     return (
         <div>
-            <h2>จำนวนคนออนไลน์: {onlineUsers ? onlineUsers.length : 0} คน</h2>
-            {onlineUsers && onlineUsers.map((onlineUser) => {
-                return (
-                    <div key={onlineUser.userId}>
-                        <div>{onlineUser.profile.username}</div>
-                    </div>
-                );
-            })}
+            <h2>จำนวนคนออนไลน์: {onlineUsers.length} คน</h2>
+            {onlineUsers.map((onlineUser) => (
+                <div key={onlineUser.userId}>
+                    <div>{onlineUser.profile?.username || "Unknown User"}</div>
+                </div>
+            ))}
         </div>
     );
 };

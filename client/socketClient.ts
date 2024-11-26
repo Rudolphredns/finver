@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 
-const socket = io('http://localhost:3000'); // URL ของเซิร์ฟเวอร์
+const socket = io('https://a3d7-184-82-65-69.ngrok-free.app '); // URL ของเซิร์ฟเวอร์
 
 socket.on('connect', () => {
     console.log('Connected to server');

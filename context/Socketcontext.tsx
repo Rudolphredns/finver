@@ -25,7 +25,7 @@ export const SocketContextProvider = ({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!user) return; // ถ้าไม่มีผู้ใช้ล็อกอิน ให้หยุดการทำงาน
 
-    const newSocket = io("http://localhost:3000"); // สร้างการเชื่อมต่อกับ socket ที่เซิร์ฟเวอร์
+    const newSocket = io("https://a3d7-184-82-65-69.ngrok-free.app"); // สร้างการเชื่อมต่อกับ socket ที่เซิร์ฟเวอร์
     setSocket(newSocket); // เก็บ socket instance ลงใน state
 
     return () => {

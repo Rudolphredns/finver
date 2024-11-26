@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import mysql from "mysql2";
 import bodyParser from "body-parser";
 import express from "express";
+import rateLimit from "express-rate-limit";
+import cors from 'cors'; 
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -12,6 +14,29 @@ const port = 3000;
 
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
+
+const expressApp = express();
+
+const corsOptions = {
+  origin: ' https://a3d7-184-82-65-69.ngrok-free.app',
+  //origin: 'http://localhost:3000/',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+};
+
+
+expressApp.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    max: 100, // จำกัด 100 requests ต่อ IP
+  })
+);
+
+expressApp.use(cors(corsOptions));
+expressApp.use(bodyParser.json());
+
+
+
 
 // ตั้งค่า MySQL
 const db = mysql.createPool({
@@ -33,8 +58,21 @@ db.getConnection((err) => {
   }
 });
 
-const expressApp = express();
-expressApp.use(bodyParser.json());
+
+expressApp.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    max: 100, // จำกัด 100 requests ต่อ IP
+  })
+);
+
+
+expressApp.get("/health", (req, res) => {
+  res.status(200).send("Server is healthy!");
+});
+
+
+
 
 // Webhook สำหรับอัปเดตข้อมูลผู้ใช้
 expressApp.post("/webhook", (req, res) => {
@@ -72,7 +110,13 @@ app.prepare().then(() => {
     }
   });
 
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: dev ? "*" : ["https://a3d7-184-82-65-69.ngrok-free.app"],
+      methods: ["GET", "POST"],
+    },
+  });
+
   let onlineUser = [];
   let videoQueue = [];
 

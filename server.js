@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from "uuid";
 import mysql from "mysql2";
 import bodyParser from "body-parser";
 import express from "express";
+import rateLimit from "express-rate-limit";
+import cors from 'cors'; 
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
@@ -13,18 +15,31 @@ const port = 3000;
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
 
+const expressApp = express();
+const corsOptions = {
+  origin: 'https://ee01-184-82-65-69.ngrok-free.app',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+};
+expressApp.use(cors(corsOptions));
+expressApp.use(bodyParser.json());
+
+
 // ตั้งค่า MySQL
+
 const db = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "",
-  database: "finver",
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'finver',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
 });
 
-// เชื่อมต่อฐานข้อมูล
+
+
+// ตรวจสอบการเชื่อมต่อฐานข้อมูล
 db.getConnection((err) => {
   if (err) {
     console.error("ไม่สามารถเชื่อมต่อกับฐานข้อมูล:", err);
@@ -33,8 +48,19 @@ db.getConnection((err) => {
   }
 });
 
-const expressApp = express();
-expressApp.use(bodyParser.json());
+
+// เพิ่ม Rate Limiting
+expressApp.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    max: 100, // จำกัด 100 requests ต่อ IP
+  })
+);
+
+// Health Check Endpoint
+expressApp.get("/health", (req, res) => {
+  res.status(200).send("Server is healthy!");
+});
 
 // Webhook สำหรับอัปเดตข้อมูลผู้ใช้
 expressApp.post("/webhook", (req, res) => {
@@ -45,8 +71,8 @@ expressApp.post("/webhook", (req, res) => {
     const updatedUsername = event.data.username;
     const clerkUserId = event.data.id;
 
-    console.log(`Updating username to: ${updatedUsername}, Clerk User ID: ${clerkUserId}`);
 
+    console.log(`Updating username to: ${updatedUsername}, Clerk User ID: ${clerkUserId}`);
     const updateQuery = "UPDATE users SET username = ? WHERE clerk_user_id = ?";
     db.query(updateQuery, [updatedUsername, clerkUserId], (err) => {
       if (err) {
@@ -72,11 +98,17 @@ app.prepare().then(() => {
     }
   });
 
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: dev ? "*" : "https://your-ngrok-url.ngrok-free.app", // หรือใช้ ["*"] ชั่วคราว
+      methods: ["GET", "POST"],
+    },
+  });
+
   let onlineUser = [];
   let videoQueue = [];
 
-  // ฟังก์ชันสำหรับบันทึกประวัติการจับคู่
+   // ฟังก์ชันสำหรับบันทึกประวัติการจับคู่
   const saveMatchHistory = (userId1, userId2) => {
     const insertQuery = "INSERT INTO match_history (user1_id, user2_id) VALUES (?, ?)";
     db.query(insertQuery, [userId1, userId2], (err) => {
@@ -87,6 +119,8 @@ app.prepare().then(() => {
       }
     });
   };
+
+
 
   // ฟังก์ชันสำหรับตรวจสอบว่าผู้ใช้สองคนเคยจับคู่กันหรือยัง
   const hasMatchedBefore = (userId1, userId2, callback) => {
@@ -102,20 +136,29 @@ app.prepare().then(() => {
     });
   };
 
+
+
+
+
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
-
+ 
+ 
     socket.on("addnewUser", (clerkUser) => {
       if (clerkUser && !onlineUser.some((user) => user?.userId === clerkUser.id)) {
+        console.log("Before Add:", onlineUser);
         console.log(`User connected: ${clerkUser.username}, ${clerkUser.email || "Email not provided"}`);
+        console.log("After Add:", onlineUser);
 
+ 
         const checkQuery = "SELECT * FROM users WHERE clerk_user_id = ?";
         db.query(checkQuery, [clerkUser.id], (err, results) => {
           if (err) {
             console.error("Error checking user in database:", err);
             return;
           }
-
+ 
+ 
           if (results.length === 0) {
             const insertQuery = `INSERT INTO users (clerk_user_id, username, email, role) VALUES (?, ?, ?, ?)`;
             db.query(insertQuery, [clerkUser.id, clerkUser.username, clerkUser.email || null, clerkUser.role], (err) => {
@@ -127,6 +170,7 @@ app.prepare().then(() => {
               }
             });
           } else {
+ 
             console.log(`User already exists in database: ${clerkUser.username}`);
           }
         });
@@ -158,7 +202,7 @@ app.prepare().then(() => {
         }
       });
     };
-
+ 
     socket.on("matchVideo", (data) => {
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
     
@@ -273,6 +317,7 @@ app.prepare().then(() => {
     });
 
 
+
     socket.on("readyForOffer", ({ roomId }) => {
       console.log("User ready for offer in room:", roomId);
       socket.join(roomId);
@@ -305,6 +350,7 @@ app.prepare().then(() => {
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
       io.emit("getUser", onlineUser);
       console.log(`User ${socket.id} disconnected`);
+      console.log("After Disconnect:", onlineUser);
     });
   });
 

@@ -120,7 +120,7 @@ app.prepare().then(() => {
   let onlineUser = [];
   let videoQueue = [];
   let chatQueue = [];
-
+  
 
   // ฟังก์ชันสำหรับบันทึกประวัติการจับคู่
   const saveMatchHistory = (userId1, userId2) => {
@@ -148,8 +148,24 @@ app.prepare().then(() => {
     });
   };
 
+
+  const rooms = {};
+
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
+
+    socket.on("joinRoom", (roomId) => {
+      if (!rooms[roomId]) {
+        rooms[roomId] = [];
+      }
+
+      // เพิ่ม socket id ของผู้ใช้ในห้อง
+      rooms[roomId].push(socket.id);
+      console.log(`${socket.id} joined room ${roomId}`);
+    });
+    
+
+
 
     //Chat Match 
     socket.on("matchChat", (data) => {
@@ -340,17 +356,34 @@ app.prepare().then(() => {
     };
     
 
-    socket.on("sendMessage", (messageData) => {
-      console.log(`Message from ${messageData.senderUsername} in room ${messageData.roomId}: ${messageData.message}`);
-      
-      // ส่งข้อความกลับไปยังห้องที่ผู้ใช้เข้าร่วม
-      io.to(messageData.roomId).emit("receiveMessage", messageData);
-    });
-
-
-      
-
+    // ฝั่ง server
+    socket.on("sendMessage", (messageData, callback) => {
+      // ตรวจสอบว่า callback เป็นฟังก์ชันหรือไม่
+      if (typeof callback === 'function') {
+        // ทำการบันทึกหรือประมวลผลข้อความที่ได้รับ
+        console.log("Received message:", messageData);
         
+        // สมมติว่าเราประมวลผลข้อความเสร็จแล้ว
+        const isMessageSent = true;  // ตัวอย่างการตรวจสอบว่าข้อความส่งสำเร็จ
+        
+        if (isMessageSent) {
+          // ถ้าส่งสำเร็จ ให้เรียก callback ด้วยข้อมูล success
+          callback({ success: true, message: "Message sent successfully" });
+          socket.to(messageData.roomId).emit("receiveMessage", messageData);
+
+        } else {
+          // ถ้าส่งไม่สำเร็จ ให้เรียก callback ด้วยข้อมูล failure
+          callback({ success: false, message: "Failed to send message" });
+        }
+      } else {
+        console.error('callback is not a function');
+      }
+    });
+    
+    
+
+
+
     //VideoMatch
     socket.on("matchVideo", (data) => {
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
@@ -488,9 +521,31 @@ app.prepare().then(() => {
       socket.to(roomId).emit("receiveIceCandidate", { candidate });
     });
 
-    socket.on("leaveRoom", ({ roomId }) => {
-      console.log(`User ${socket.id} leaving room ${roomId}`);
-      videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
+    socket.on("leaveRoom", (roomId) => {
+      // ตรวจสอบว่าผู้ใช้มีการเชื่อมต่ออยู่ในห้องหรือไม่
+      if (rooms[roomId]) {
+        // ลบ socket id ของผู้ใช้ที่ออกจากห้อง
+        const index = rooms[roomId].indexOf(socket.id);
+        if (index !== -1) {
+          rooms[roomId].splice(index, 1);
+          console.log(`${socket.id} left room ${roomId}`);
+        }
+    
+        // หากห้องยังมีผู้ใช้อยู่ ให้ส่งเหตุการณ์ออกจากห้องไปยังผู้ใช้คนอื่นๆ
+        if (rooms[roomId].length > 0) {
+          // ส่งคำสั่งให้ผู้ใช้ที่เหลือออกจากห้อง
+          rooms[roomId].forEach((socketId) => {
+            const socketToDisconnect = io.sockets.sockets.get(socketId);
+            if (socketToDisconnect) {
+              socketToDisconnect.emit("leaveRoom", roomId);  // ให้ผู้ใช้ที่เหลือออกจากห้องด้วย
+            }
+          });
+        } else {
+          // ถ้าห้องไม่มีผู้ใช้แล้ว ให้ลบข้อมูลห้องนี้ออกจาก rooms
+          io.to(roomId).emit('roomClosed');
+          delete rooms[roomId];
+        }
+      }
     });
 
     socket.on("disconnect", () => {

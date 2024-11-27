@@ -18,11 +18,11 @@ const handler = app.getRequestHandler();
 const expressApp = express();
 
 const corsOptions = {
-  origin: ' https://a3d7-184-82-65-69.ngrok-free.app',
-  //origin: 'http://localhost:3000/',
+  origin: process.env.CORS_ORIGIN,
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type'],
 };
+
 
 
 expressApp.use(
@@ -112,13 +112,15 @@ app.prepare().then(() => {
 
   const io = new Server(httpServer, {
     cors: {
-      origin: dev ? "*" : ["https://a3d7-184-82-65-69.ngrok-free.app"],
+      origin: dev ? "*" : [process.env.CORS_ORIGIN],
       methods: ["GET", "POST"],
     },
   });
 
   let onlineUser = [];
   let videoQueue = [];
+  let chatQueue = [];
+
 
   // ฟังก์ชันสำหรับบันทึกประวัติการจับคู่
   const saveMatchHistory = (userId1, userId2) => {
@@ -149,6 +151,135 @@ app.prepare().then(() => {
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
+    //Chat Match 
+    socket.on("matchChat", (data) => {
+      // 1. ลบผู้ใช้ที่มี socketId ตรงกับผู้ใช้ที่ส่งคำขอจาก chatQueue (ไม่ให้ซ้ำในคิว)
+      chatQueue = chatQueue.filter((user) => user.socketId !== socket.id);
+    
+      // 2. ตั้งเวลาให้ทำงานใน 500ms (จากคำขอ)
+      setTimeout(() => {
+        // 3. ค้นหาผู้ใช้ที่ส่งคำขอในระบบออนไลน์
+        const requestingUser = onlineUser.find((user) => user.userId === data.userId);
+    
+        if (!requestingUser) {
+          console.log("Requesting user not found.");
+          return;
+        }
+    
+        // 4. ฟังก์ชันดึงข้อมูลเพศ, ความสนใจ และความสนใจทางเพศจากฐานข้อมูลของผู้ใช้
+        const getUserDetails = (userId, callback) => {
+          const userQuery = "SELECT gender, sex_interest, interests FROM users WHERE clerk_user_id = ?";
+          db.query(userQuery, [userId], (err, results) => {
+            if (err) {
+              console.error("Error retrieving user details:", err);
+              callback(null);
+            } else if (results.length > 0) {
+              callback(results[0]);
+            } else {
+              console.log("User details not found for:", userId);
+              callback(null);
+            }
+          });
+        };
+    
+        // 5. ดึงข้อมูลของผู้ใช้ที่ส่งคำขอ
+        getUserDetails(requestingUser.userId, (requestingUserDetails) => {
+          if (!requestingUserDetails) {
+            console.log("Requesting user details could not be fetched.");
+            return;
+          }
+    
+          // 6. เก็บข้อมูลเพศ, ความสนใจ และความสนใจทางเพศ
+          const { gender, sex_interest, interests } = requestingUserDetails;
+          const requestingUserInterests = interests.split(",").map((interest) => interest.trim());
+    
+          // 7. ฟังก์ชันตรวจสอบการจับคู่ผู้ใช้ที่สนใจ
+          const checkMatches = async () => {
+            // 8. ลูปผ่านผู้ใช้ใน chatQueue เพื่อหาผู้ที่ตรงกับเงื่อนไข
+            for (const user of chatQueue) {
+              const matchedUserDetails = await new Promise((resolve) =>
+                getUserDetails(user.userId, resolve)
+              );
+    
+              if (!matchedUserDetails) continue;
+    
+              const {
+                gender: matchedUserGender,
+                sex_interest: matchedUserSexInterest,
+                interests: matchedUserInterests,
+              } = matchedUserDetails;
+    
+              const interestsArray = matchedUserInterests.split(",").map((interest) => interest.trim());
+    
+              // 9. เช็คความตรงกันของเพศและความสนใจทางเพศ
+              const isGenderMatch =
+                (sex_interest === "any" || sex_interest === matchedUserGender) &&
+                (matchedUserSexInterest === "any" || matchedUserSexInterest === gender);
+    
+              if (!isGenderMatch) {
+                console.log(`Gender or sex interest mismatch: ${requestingUser.userId} with ${user.userId}`);
+                continue;
+              }
+    
+              // 10. เช็คความสนใจที่ตรงกัน
+              const matchingInterests = interestsArray.filter((interest) =>
+                requestingUserInterests.includes(interest)
+              );
+    
+              // 11. ตรวจสอบว่าเคยจับคู่กันแล้วหรือไม่
+              const hasMatched = await new Promise((resolve) =>
+                hasMatchedBefore(requestingUser.userId, user.userId, resolve)
+              );
+    
+              if (matchingInterests.length >= 3 && !hasMatched) {
+                const matchedUser = user;
+    
+                // 12. ลบผู้ใช้ที่จับคู่จาก chatQueue และสร้างห้องแชท
+                chatQueue = chatQueue.filter((u) => u.userId !== matchedUser.userId);
+    
+                const roomId = uuidv4();
+                socket.join(roomId);
+                io.sockets.sockets.get(matchedUser.socketId)?.join(roomId);
+    
+                // 13. แจ้งผู้ใช้ที่จับคู่สำเร็จ
+                io.to(requestingUser.socketId).emit("chatMatched", {
+                  peerUser: matchedUser.profile,
+                  roomId,
+                  initiator: true,
+                });
+                io.to(matchedUser.socketId).emit("chatMatched", {
+                  peerUser: requestingUser.profile,
+                  roomId,
+                  initiator: false,
+                });
+    
+                console.log(`Matched users: ${requestingUser.userId} with ${matchedUser.userId} in room ${roomId}`);
+    
+                // 14. บันทึกประวัติการจับคู่
+                //saveMatchHistory(requestingUser.userId, matchedUser.userId);
+    
+                return;
+              }
+            }
+    
+            // 15. หากไม่มีการจับคู่ ให้เพิ่มผู้ใช้กลับเข้า chatQueue
+            requestingUser.interests = requestingUserInterests;
+            requestingUser.gender = gender;
+            requestingUser.sex_interest = sex_interest;
+    
+            chatQueue.push(requestingUser);
+            console.log(`User added to chatQueue: ${requestingUser.userId}`);
+          };
+    
+          checkMatches();
+        });
+      }, 500);
+    });
+    
+
+
+    
+    //Add NewUser
     socket.on("addnewUser", (clerkUser) => {
       if (clerkUser && !onlineUser.some((user) => user?.userId === clerkUser.id)) {
         console.log(`User connected: ${clerkUser.username}, ${clerkUser.email || "Email not provided"}`);
@@ -185,6 +316,11 @@ app.prepare().then(() => {
       }
     });
 
+
+
+
+
+    //GetUser
     const getUserInterest = (userId, callback) => {
       const interestQuery = "SELECT interests FROM users WHERE clerk_user_id = ?";
       db.query(interestQuery, [userId], (err, results) => {
@@ -202,7 +338,20 @@ app.prepare().then(() => {
         }
       });
     };
+    
 
+    socket.on("sendMessage", (messageData) => {
+      console.log(`Message from ${messageData.senderUsername} in room ${messageData.roomId}: ${messageData.message}`);
+      
+      // ส่งข้อความกลับไปยังห้องที่ผู้ใช้เข้าร่วม
+      io.to(messageData.roomId).emit("receiveMessage", messageData);
+    });
+
+
+      
+
+        
+    //VideoMatch
     socket.on("matchVideo", (data) => {
       videoQueue = videoQueue.filter((user) => user.socketId !== socket.id);
     

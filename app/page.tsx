@@ -47,6 +47,7 @@ export default function Home() {
   const handleMatchChat = () => {
     if (socket && user) {
       socket.emit('matchChat', { userId: user.id });
+      router.push('/chatmatch'); 
     }
   };
 

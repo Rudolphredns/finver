@@ -1,8 +1,9 @@
 // pages/select-interests.tsx
-
+'use client';
 import { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';  // ใช้ 'next/navigation' ใน App Directory
+
 
 const interestsList = [
   'Technology', 'Science', 'Music', 'Art', 'Sports', 'Travel', 'Food', 'Fashion', 'Education'
@@ -27,9 +28,10 @@ const SelectInterests = () => {
   };
 
   const handleSubmit = async () => {
+    console.log('Selected Interests:', selectedInterests); // ตรวจสอบค่าที่ส่ง
     if (selectedInterests.length === 3) {
       try {
-        const response = await fetch('/api/updateInterests', {
+        const response = await fetch('api/updateInterests', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -39,8 +41,9 @@ const SelectInterests = () => {
             interests: selectedInterests,
           }),
         });
-
+  
         const data = await response.json();
+        console.log('API Response:', data); // ตรวจสอบผลลัพธ์จาก API
         if (response.ok) {
           alert('บันทึกข้อมูลเรียบร้อย');
           router.push('/');
@@ -55,6 +58,8 @@ const SelectInterests = () => {
       setError('กรุณาเลือก 3 ความสนใจ');
     }
   };
+  
+  
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">

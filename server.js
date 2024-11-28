@@ -289,7 +289,7 @@ app.prepare().then(() => {
     
           checkMatches();
         });
-      }, 500);
+      }, 2000);
     });
     
 
@@ -314,7 +314,7 @@ app.prepare().then(() => {
                 console.error("Error inserting user into database:", err);
               } else {
                 console.log(`User added to database: ${clerkUser.username}`);
-                socket.emit("redirectTo", "/select_interest");
+                socket.emit("redirectTo", "/select_gender");
               }
             });
           } else {
@@ -495,7 +495,7 @@ app.prepare().then(() => {
     
           checkMatches();
         });
-      }, 500);
+      }, 2000);
     });
 
 

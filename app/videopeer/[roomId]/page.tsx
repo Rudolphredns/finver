@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSocket } from "@/context/Socketcontext";
+import { useSocket } from "@/client/socket/context/Socketcontext";
 import { useParams } from "next/navigation";
 
 export default function VideoPeer() {

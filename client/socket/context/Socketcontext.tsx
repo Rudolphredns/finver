@@ -1,4 +1,4 @@
-import { SocketUser } from "@/types";
+import { SocketUser } from "@/backend/types";
 import { useUser } from "@clerk/nextjs";
 import React, { createContext, useContext, useEffect, useState, Dispatch, SetStateAction } from "react";
 import { io, Socket } from "socket.io-client";

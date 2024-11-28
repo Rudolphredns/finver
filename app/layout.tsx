@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import SocketProvider from "@/providers/SocketProviders";
+import SocketProvider from "@/client/socket/providers/SocketProviders";
 import Navbar from "@/components/layout/NavBar";
 
 export const metadata: Metadata = {

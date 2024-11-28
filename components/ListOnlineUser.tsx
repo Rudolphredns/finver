@@ -1,9 +1,9 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useSocket } from "@/context/Socketcontext";
+import { useSocket } from "@/client/socket/context/Socketcontext";
 import { SetStateAction, useEffect } from "react";
-import { SocketUser } from "@/types";
+import { SocketUser } from "@/backend/types";
 
 const ListOnlineUser = () => {
     const { user } = useUser();

@@ -1,10 +1,9 @@
 "use client";
-import { Video } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Container from "./Containner";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { Button } from "../ui/button";
-import { useSocket } from "@/context/Socketcontext"; // นำเข้า context ของ socket
+import { useSocket } from "@/client/socket/context/Socketcontext"; // นำเข้า context ของ socket
 import { useParams } from "next/navigation"; // ใช้ useParams เพื่อเข้าถึง roomId
 
 const NavBar = () => {

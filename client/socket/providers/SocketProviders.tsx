@@ -1,6 +1,6 @@
 "use client"
 
-import { SocketContextProvider } from "@/context/Socketcontext"
+import { SocketContextProvider } from "@/client/socket/context/Socketcontext"
 import React from "react";
 
 

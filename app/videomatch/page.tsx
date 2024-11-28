@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSocket } from "@/context/Socketcontext";
+import { useSocket } from "@/client/socket/context/Socketcontext";
 import { useRouter } from "next/navigation";
-import { SocketUser } from "@/types";
+import { SocketUser } from "@/backend/types";
 
 export default function Videomatch() {
   const { socket } = useSocket();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSocket } from "@/context/Socketcontext";
+import { useSocket } from "@/client/socket/context/Socketcontext";
 import { useParams } from "next/navigation";
 import { useUser } from "@clerk/clerk-react";
 import { useRouter } from "next/navigation";

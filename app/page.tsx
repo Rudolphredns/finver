@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
-import { useSocket } from "@/context/Socketcontext";
+import { useSocket } from "@/client/socket/context/Socketcontext";
 import ListOnlineUser from "@/components/ListOnlineUser";
 
 export default function Home() {

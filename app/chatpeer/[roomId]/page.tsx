@@ -23,14 +23,17 @@ export default function ChatPeer() {
 
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [newMessage, setNewMessage] = useState<string>("");
-
+  const [reason, setReason] = useState<string>("");
+  const [reportModalOpen, setReportModalOpen] = useState<boolean>(false);  // เปิด/ปิด Modal
   const senderUsername = user?.username || "Anonymous";  // ใช้ "Anonymous" ถ้าไม่มี username
+
+  const reportReasons = ["พฤติกรรมไม่เหมาะสม", "การกระทำผิดกฎ", "การข่มขู่หรือคุกคาม"]; // เหตุผลที่ใช้ในการรีพอร์ต
 
   // ฟังการส่งข้อความจากห้อง
   useEffect(() => {
     if (socket) {
       socket.on("receiveMessage", (messageData: MessageData) => {
-        setMessages((prevMessages) => [...prevMessages, messageData]); 
+        setMessages((prevMessages) => [...prevMessages, messageData]);
       });
 
       return () => {
@@ -42,7 +45,7 @@ export default function ChatPeer() {
   // ฟังการเข้าไปในห้อง chat
   useEffect(() => {
     if (socket && roomId) {
-      socket.emit("joinRoom", roomId); 
+      socket.emit("joinRoom", roomId);
     }
   }, [socket, roomId]);
 
@@ -52,7 +55,6 @@ export default function ChatPeer() {
       socket.on("leaveRoom", (roomId) => {
         console.log(`You have been removed from room ${roomId}`);
         socket.emit("leaveRoom", roomId);
-        // ออกจากห้องแล้ว, รีไดเรกไปที่หน้า main
         router.push("/"); // กำหนดให้ redirect ไปหน้า main page
       });
 
@@ -66,13 +68,11 @@ export default function ChatPeer() {
   useEffect(() => {
     if (socket) {
       socket.on("roomClosed", () => {
-        // แสดง alert ให้ผู้ใช้ทราบว่าห้องถูกยุบ
         alert("ห้องของคุณถูกยุบ");
 
-        // รอให้ผู้ใช้เห็นข้อความ alert แล้วค่อยทำการ redirect
         setTimeout(() => {
-          router.push("/");  // รีไดเรกไปหน้าแรก
-        }, 1000); // ใช้เวลา 1 วินาทีหลังจากปิด alert เพื่อให้ผู้ใช้เห็นข้อความ
+          router.push("/");  
+        }, 1000);
       });
 
       return () => {
@@ -101,7 +101,7 @@ export default function ChatPeer() {
       });
 
       setMessages((prevMessages) => [...prevMessages, messageData]);
-      setNewMessage("");  // ล้างข้อความใน input
+      setNewMessage("");  // ล้างข้อความใน input  
     }
   };
 
@@ -113,6 +113,32 @@ export default function ChatPeer() {
         console.log(`Left room ${roomId}`);
         router.push("/");  // กำหนดให้ redirect ไปหน้า main page
       }
+    }
+  };
+
+  // ฟังก์ชันในการรีพอร์ต
+  const handleReport = () => {
+    if (reason.trim() === "") {
+      alert("กรุณาเลือกเหตุผลในการรีพอร์ต");
+      return;
+    }
+
+    const reportData = {
+      reported_user_id: "ID ของผู้ถูกรีพอร์ต", // ใช้ ID ของผู้ถูกรีพอร์ต
+      reporting_user_id: user?.id, // ใช้ user id ของผู้รีพอร์ต
+      reason: reason,
+      description: "รายละเอียดเพิ่มเติม (ถ้ามี)",
+    };
+
+    if (socket) {
+      socket.emit("reportUser", reportData, (response: { success: boolean, message: string }) => {
+        if (response.success) {
+          alert("รายงานสำเร็จ!");
+          setReportModalOpen(false); // ปิด modal หลังจากรายงานเสร็จ
+        } else {
+          alert("ไม่สามารถทำการรีพอร์ตได้");
+        }
+      });
     }
   };
 
@@ -147,11 +173,50 @@ export default function ChatPeer() {
       </div>
 
       {/* ปุ่มออกจากห้อง */}
-      <button 
-        onClick={handleLeaveRoom} 
-        className="mt-4 bg-red-500 text-white px-4 py-2 rounded-md">
+      <button onClick={handleLeaveRoom} className="mt-4 bg-red-500 text-white px-4 py-2 rounded-md">
         ออกจากห้อง
       </button>
+
+      {/* ปุ่มรีพอร์ต */}
+      <button
+        onClick={() => setReportModalOpen(true)}
+        className="mt-4 bg-yellow-500 text-white px-4 py-2 rounded-md"
+      >
+        รีพอร์ตผู้ใช้
+      </button>
+
+      {/* Modal สำหรับเลือกเหตุผลในการรีพอร์ต */}
+      {reportModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-600 bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg w-96">
+            <h2 className="text-xl font-bold mb-4">เลือกเหตุผลในการรีพอร์ต</h2>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md mb-4"
+            >
+              <option value="">เลือกเหตุผล</option>
+              {reportReasons.map((reasonOption, index) => (
+                <option key={index} value={reasonOption}>
+                  {reasonOption}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleReport}
+              className="bg-blue-500 text-white px-4 py-2 rounded-md w-full"
+            >
+              ส่งรายงาน
+            </button>
+            <button
+              onClick={() => setReportModalOpen(false)}
+              className="mt-2 text-gray-500"
+            >
+              ปิด
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

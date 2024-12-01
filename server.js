@@ -356,21 +356,33 @@ app.prepare().then(() => {
     };
     
 
+    
+
     // ฝั่ง server
     socket.on("sendMessage", (messageData, callback) => {
+      const { roomId, senderId, message, senderUsername } = messageData;
+    
       // ตรวจสอบว่า callback เป็นฟังก์ชันหรือไม่
       if (typeof callback === 'function') {
-        // ทำการบันทึกหรือประมวลผลข้อความที่ได้รับ
         console.log("Received message:", messageData);
-        
+    
         // สมมติว่าเราประมวลผลข้อความเสร็จแล้ว
         const isMessageSent = true;  // ตัวอย่างการตรวจสอบว่าข้อความส่งสำเร็จ
         
         if (isMessageSent) {
           // ถ้าส่งสำเร็จ ให้เรียก callback ด้วยข้อมูล success
           callback({ success: true, message: "Message sent successfully" });
-          socket.to(messageData.roomId).emit("receiveMessage", messageData);
-
+    
+          // บันทึกข้อความลงในฐานข้อมูลเพื่อทำรีพอร์ต
+          const insertQuery = "INSERT INTO chat_history (room_id, sender_id, sender_username, message, timestamp) VALUES (?, ?, ?, ?, ?)";
+          db.query(insertQuery, [roomId, senderId, senderUsername, message, new Date().toISOString()], (err) => {
+            if (err) {
+              console.error("Error saving chat history:", err);
+            } else {
+              console.log("Chat message saved successfully!");
+              socket.to(messageData.roomId).emit("receiveMessage", messageData);
+            }
+          });
         } else {
           // ถ้าส่งไม่สำเร็จ ให้เรียก callback ด้วยข้อมูล failure
           callback({ success: false, message: "Failed to send message" });
@@ -379,6 +391,8 @@ app.prepare().then(() => {
         console.error('callback is not a function');
       }
     });
+    
+    
     
     
 

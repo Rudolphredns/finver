@@ -2,11 +2,19 @@
 'use client';
 import { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { useRouter } from 'next/navigation';  // ใช้ 'next/navigation' ใน App Directory
-
+import { useRouter } from 'next/navigation';
+import { FaLaptop, FaMusic, FaPalette, FaDumbbell, FaGlobe, FaUtensils, FaTshirt, FaBook, FaPlane } from 'react-icons/fa';
 
 const interestsList = [
-  'Technology', 'Science', 'Music', 'Art', 'Sports', 'Travel', 'Food', 'Fashion', 'Education'
+  { name: 'Technology', icon: FaLaptop },
+  { name: 'Science', icon: FaGlobe },
+  { name: 'Music', icon: FaMusic },
+  { name: 'Art', icon: FaPalette },
+  { name: 'Sports', icon: FaDumbbell },
+  { name: 'Travel', icon: FaPlane },
+  { name: 'Food', icon: FaUtensils },
+  { name: 'Fashion', icon: FaTshirt },
+  { name: 'Education', icon: FaBook },
 ];
 
 const SelectInterests = () => {
@@ -18,6 +26,7 @@ const SelectInterests = () => {
   const handleSelectInterest = (interest: string) => {
     if (selectedInterests.includes(interest)) {
       setSelectedInterests(selectedInterests.filter((i) => i !== interest));
+      setError(null); // ลบข้อความผิดพลาดเมื่อแก้ไข
     } else {
       if (selectedInterests.length < 3) {
         setSelectedInterests([...selectedInterests, interest]);
@@ -28,22 +37,18 @@ const SelectInterests = () => {
   };
 
   const handleSubmit = async () => {
-    console.log('Selected Interests:', selectedInterests); // ตรวจสอบค่าที่ส่ง
     if (selectedInterests.length === 3) {
       try {
-        const response = await fetch('api/updateInterests', {
+        const response = await fetch('/api/updateInterests', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: user?.id,
             interests: selectedInterests,
           }),
         });
-  
+
         const data = await response.json();
-        console.log('API Response:', data); // ตรวจสอบผลลัพธ์จาก API
         if (response.ok) {
           alert('บันทึกข้อมูลเรียบร้อย');
           router.push('/');
@@ -58,30 +63,31 @@ const SelectInterests = () => {
       setError('กรุณาเลือก 3 ความสนใจ');
     }
   };
-  
-  
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      <h1 className="text-3xl font-bold mb-4">เลือกความสนใจของคุณ</h1>
-      {error && <p className="text-red-500">{error}</p>}
-      <div className="grid grid-cols-3 gap-4">
-        {interestsList.map((interest) => (
-          <button
-            key={interest}
-            onClick={() => handleSelectInterest(interest)}
-            className={`p-4 border rounded-md ${
-              selectedInterests.includes(interest) ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'
-            }`}
-          >
-            {interest}
-          </button>
-        ))}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground px-4">
+      <h1 className="text-3xl font-bold mb-8">เลือกความสนใจของคุณ</h1>
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-lg">
+        {interestsList.map((interest) => {
+          const Icon = interest.icon;
+          return (
+            <div
+              key={interest.name}
+              onClick={() => handleSelectInterest(interest.name)}
+              className={`cursor-pointer p-6 flex flex-col items-center justify-center border rounded-lg transition-all duration-300 
+              ${selectedInterests.includes(interest.name) ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-card-dark'}`}
+            >
+              <Icon size={30} className="mb-2" />
+              <span className="text-center font-semibold">{interest.name}</span>
+            </div>
+          );
+        })}
       </div>
       <button
         onClick={handleSubmit}
         disabled={selectedInterests.length !== 3}
-        className="mt-4 bg-green-500 text-white px-4 py-2 rounded-md disabled:bg-gray-300"
+        className="mt-6 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg shadow-md disabled:bg-muted disabled:text-muted-foreground transition-all"
       >
         ยืนยัน
       </button>

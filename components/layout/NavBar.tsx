@@ -1,47 +1,54 @@
+// src/components/NavBar.tsx
 "use client";
 import { useRouter } from "next/navigation";
 import Container from "./Containner";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { Button } from "../ui/button";
-import { useSocket } from "@/client/socket/context/Socketcontext"; // นำเข้า context ของ socket
-import { useParams } from "next/navigation"; // ใช้ useParams เพื่อเข้าถึง roomId
+import { useSocket } from "@/client/socket/context/Socketcontext"; 
+import { useParams } from "next/navigation";
 
 const NavBar = () => {
   const router = useRouter();
   const { userId } = useAuth();
-  const { socket } = useSocket(); // ใช้งาน socket จาก context
+  const { socket } = useSocket();
   const params = useParams();
-  const roomId = params?.roomId as string | undefined; // ตรวจสอบ roomId เพื่อดูว่าอยู่ในห้องหรือไม่
+  const roomId = params?.roomId as string | undefined;
 
   const handleNavigateHome = () => {
     if (roomId && socket) {
-      // แสดงการยืนยันก่อนออกจากห้อง
       const confirmed = window.confirm("Are you sure you want to leave the video call?");
       if (confirmed) {
-        socket.emit("leaveRoom", { roomId }); // ส่ง leaveRoom ไปที่ server
-        router.push("/"); // นำผู้ใช้กลับไปที่หน้าหลัก
+        socket.emit("leaveRoom", { roomId });
+        router.push("/");
       }
     } else {
-      router.push("/"); // ถ้าไม่ได้อยู่ในห้องก็ไปหน้าหลักเลย
+      router.push("/");
     }
   };
 
   return (
-    <div className="sticky top-0 border-b-primary/10">
+    <div className="sticky top-0 bg-[#282828] border-b border-primary/10 z-50">
       <Container>
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center py-2">
           <div
             className="flex items-center gap-1 cursor-pointer"
-            onClick={handleNavigateHome} // เรียก handleNavigateHome เมื่อคลิก
+            onClick={handleNavigateHome}
           >
-            <div className="font-bold text-2xl">Finver</div>
+            <div className="font-bold text-xl 
+                            bg-logo-gradient 
+                            bg-clip-text 
+                            text-transparent 
+                            animate-colorShift 
+                            bg-logo-size">
+              Finver
+            </div>
           </div>
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-2 items-center">
             <UserButton />
             {!userId && (
               <>
-                <Button onClick={() => router.push('/sign-in')} size='sm' variant='outline'>Sign in</Button>
-                <Button onClick={() => router.push('/sign-up')} size='sm' >Sign up</Button>
+                <Button onClick={() => router.push('/sign-in')} size='sm' variant='outline' className="px-2 py-1 text-sm">Sign in</Button>
+                <Button onClick={() => router.push('/sign-up')} size='sm' className="px-2 py-1 text-sm">Sign up</Button>
               </>
             )}
           </div>
